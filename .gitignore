@@ -1,0 +1,9 @@
+node_modules/
+.env
+dist/
+build/
+coverage/
+*.log
+.pgdata/
+.DS_Store
+!.env.example

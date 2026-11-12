@@ -1,0 +1,6 @@
+{
+  "name": "Loopback",
+  "description": "Interactive API security demonstration lab detecting BOLA/IDOR, enumeration, and business logic abuse with Gemini natural language explanations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

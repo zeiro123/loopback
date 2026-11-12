@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: loopback-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "12345678"
+      POSTGRES_DB: loopback
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-soc-db.sql:/docker-entrypoint-initdb.d/01-init-soc.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loopback"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  soc:
+    build: ./soc
+    container_name: loopback-soc
+    environment:
+      SOC_DATABASE_URL: postgres://postgres:12345678@db:5432/soc
+      SOC_PORT: "5100"
+    ports:
+      - "5100:5100"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  target:
+    build: ./target
+    container_name: loopback-target
+    environment:
+      DATABASE_URL: postgres://postgres:12345678@db:5432/loopback
+      SOC_URL: http://soc:5100
+      PORT: "5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

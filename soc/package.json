@@ -1,0 +1,19 @@
+{
+  "name": "loopback-soc",
+  "version": "1.0.0",
+  "description": "Loopback SOC — standalone security operations app that ingests REST + GraphQL API traffic and aggregated db events, correlates sessions, and raises multi-step attack alerts",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "graphql-yoga": "^6.0.1",
+    "express": "^4.21.2",
+    "graphql": "^16.9.0",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

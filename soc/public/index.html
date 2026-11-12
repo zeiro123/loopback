@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loopback SOC — Defense Console</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- ============ LOGIN GATE ============ -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <div class="gate-mark">◆</div>
+      <h1>LOOPBACK <span>SOC</span></h1>
+      <p>Security Operations Center &bull; operator login required</p>
+      <div id="gateError" class="banner error hidden"></div>
+      <form id="gateForm">
+        <label>Operator username<input id="gateUser" type="text" value="admin" autocomplete="username" /></label>
+        <label>Operator password<input id="gatePass" type="password" value="admin" autocomplete="current-password" /></label>
+        <button type="submit" class="btn primary">Access Console</button>
+      </form>
+      <p class="gate-hint">Lab default: <code>admin / admin</code></p>
+    </div>
+  </div>
+
+  <!-- ============ CONSOLE ============ -->
+  <div id="console" class="hidden">
+    <header class="soc-header">
+      <div class="soc-header-inner">
+        <div class="soc-brand">
+          <div class="soc-mark">◆</div>
+          <div>
+            <span class="soc-name">LOOPBACK <span class="soc-badge">DEFENSE CONSOLE</span></span>
+            <span class="soc-sub">Cross-layer API ↔ SQL correlation &bull; operator: admin</span>
+          </div>
+        </div>
+        <div class="soc-actions">
+          <a class="btn ghost" href="http://localhost:5000" target="_blank" rel="noreferrer">Banking App ↗</a>
+          <button class="btn ghost" id="clearBtn" type="button">Clear Store</button>
+          <button class="btn danger" id="logoutBtn" type="button">Exit</button>
+        </div>
+      </div>
+      <div class="soc-stats">
+        <div class="soc-stat"><span class="v" id="stApi">0</span><span class="l">API events</span></div>
+        <div class="soc-stat"><span class="v" id="stDb">0</span><span class="l">SQL events</span></div>
+        <div class="soc-stat"><span class="v" id="stAlerts">0</span><span class="l">Alerts</span></div>
+        <div class="soc-stat alert"><span class="v" id="stCritical">0</span><span class="l">High / critical</span></div>
+        <div class="soc-stat"><span class="v" id="stActors">0</span><span class="l">Active actors</span></div>
+      </div>
+      <nav class="soc-tabs">
+        <button class="soc-tab active" data-tab="traffic" type="button">Live Traffic</button>
+        <button class="soc-tab" data-tab="alerts" type="button">Security Alerts <span id="alertCount" class="pill hidden">0</span></button>
+        <button class="soc-tab" data-tab="sessions" type="button">Sessions</button>
+      </nav>
+    </header>
+
+    <main class="soc-main">
+      <!-- Live Traffic -->
+      <section id="panel-traffic" class="panel active">
+        <div class="traffic-head">
+          <div class="pulse-dot"></div>
+          <span class="traffic-title">Continuous REST + GraphQL stream — every request bound to the SQL it produced</span>
+          <span class="muted mono">/var/log/loopback/events.log</span>
+        </div>
+        <div class="traffic-scroll" id="trafficStream"></div>
+      </section>
+
+      <!-- Alerts -->
+      <section id="panel-alerts" class="panel">
+        <div id="alertsEmpty" class="empty-state hidden">
+          <div class="empty-mark">✓</div>
+          <h3>No threat alerts triggered</h3>
+          <p>All correlated session activity currently matches the baseline. Trigger detections from the banking portal: swap account numbers (IDOR), submit negative or overdraft transfers, or sweep several accounts quickly.</p>
+        </div>
+        <div id="alertsList" class="alerts-list"></div>
+      </section>
+
+      <!-- Sessions -->
+      <section id="panel-sessions" class="panel">
+        <p class="panel-hint">Session aggregates over the last 60 minutes — click an actor to open its loopback timeline (request → SQL chain).</p>
+        <div id="sessionsList" class="sessions-list"></div>
+        <div id="timelineBox" class="timeline-box hidden">
+          <div class="timeline-head">
+            <h3 id="timelineTitle">Timeline</h3>
+            <button class="btn ghost" id="timelineClose" type="button">Close</button>
+          </div>
+          <div id="timeline" class="timeline"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============ ATTACK PATH MODAL ============ -->
+  <div id="pathModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="modal-tag">ATTACK PATH</span>
+          <h3 id="pathTitle">—</h3>
+          <span class="muted mono" id="pathSub">—</span>
+        </div>
+        <button class="modal-close" id="pathClose" type="button">✕</button>
+      </div>
+      <div class="path-grid" id="pathNodes"></div>
+      <h4 class="section-label">Attack sequence</h4>
+      <div id="pathSteps" class="path-steps"></div>
+    </div>
+  </div>
+
+  <!-- ============ EVIDENCE MODAL ============ -->
+  <div id="evModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="modal-tag">EVIDENCE &amp; LOOPBACK CHAIN</span>
+          <h3 id="evTitle">—</h3>
+        </div>
+        <button class="modal-close" id="evClose" type="button">✕</button>
+      </div>
+      <pre id="evJson" class="ev-json"></pre>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

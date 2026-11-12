@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Trust Bank — Secure Client Portal</title>
+  <meta name="description" content="Apex Trust Bank online banking — transfers, statements, and account management." />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- ============ AUTH VIEW ============ -->
+  <div id="authView" class="auth-wrap">
+    <div class="top-strip"></div>
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <h1>Apex Trust Bank</h1>
+        <p>Secure Client Portal &bull; Zimbabwe</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="tabLogin" class="auth-tab active" type="button">Sign In</button>
+        <button id="tabRegister" class="auth-tab" type="button">Open Account</button>
+      </div>
+
+      <div id="loginError" class="banner error hidden"></div>
+      <div id="registerError" class="banner error hidden"></div>
+
+      <form id="loginForm" class="auth-form">
+        <label>Username
+          <input id="loginUsername" type="text" autocomplete="username" placeholder="e.g. Mary" required />
+        </label>
+        <label>Password
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password" required />
+        </label>
+        <button type="submit" class="btn primary" id="loginBtn">Sign In</button>
+      </form>
+
+      <form id="registerForm" class="auth-form hidden">
+        <label>Full name
+          <input id="regName" type="text" placeholder="e.g. Tendai Moyo" required />
+        </label>
+        <label>Username
+          <input id="regUsername" type="text" placeholder="Choose a username" required />
+        </label>
+        <label>Email
+          <input id="regEmail" type="email" placeholder="you@example.com" />
+        </label>
+        <label>Password
+          <input id="regPassword" type="password" placeholder="At least 4 characters" required minlength="4" />
+        </label>
+        <p class="fine-print">New accounts open with a <strong>500 ZWL</strong> deposit from Apex Trust Bank.</p>
+        <button type="submit" class="btn primary" id="registerBtn">Open My Account</button>
+      </form>
+
+      <div class="demo-creds">
+        <span>Demo customers:</span>
+        <code>Mary / peter</code> <code>John / peter</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ APP VIEW ============ -->
+  <div id="appView" class="hidden">
+    <header class="bank-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="brand-mark small">A</div>
+          <div>
+            <span class="bank-name">Apex Trust Bank</span>
+            <span class="bank-sub">Private Banking</span>
+          </div>
+        </div>
+        <div class="header-user">
+          <div class="user-meta">
+            <span class="user-label">Account holder</span>
+            <span class="user-name" id="headerName">—</span>
+          </div>
+          <button class="btn ghost" id="logoutBtn" type="button">Sign Out</button>
+        </div>
+      </div>
+      <nav class="bank-tabs">
+        <button class="bank-tab active" data-tab="dashboard" type="button">Dashboard</button>
+        <button class="bank-tab" data-tab="transfer" type="button">Send Money</button>
+        <button class="bank-tab" data-tab="transactions" type="button">Transactions</button>
+        <button class="bank-tab" data-tab="statements" type="button">Statements</button>
+        <button class="bank-tab" data-tab="profile" type="button">Profile</button>
+        <button class="bank-tab" data-tab="apikey" type="button">API Keys</button>
+      </nav>
+    </header>
+
+    <main class="bank-main">
+      <!-- Dashboard -->
+      <section id="panel-dashboard" class="panel active">
+        <div class="balance-card">
+          <div class="balance-left">
+            <span class="balance-label">Primary Checking</span>
+            <span class="balance-amount" id="dashBalance">ZWL 0.00</span>
+          </div>
+          <div class="balance-right">
+            <span class="chip" id="dashAccount">ACC-…</span>
+            <span class="chip subtle" id="dashCurrency">ZWL</span>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-card"><span class="stat-value" id="statTxCount">0</span><span class="stat-label">Transactions</span></div>
+          <div class="stat-card"><span class="stat-value" id="statOwner">—</span><span class="stat-label">Account holder</span></div>
+          <div class="stat-card"><span class="stat-value" id="statType">CHECKING</span><span class="stat-label">Account type</span></div>
+        </div>
+        <div class="card">
+          <h3>Recent activity</h3>
+          <div id="dashRecent" class="mini-txns"></div>
+        </div>
+      </section>
+
+      <!-- Send Money -->
+      <section id="panel-transfer" class="panel">
+        <div class="card narrow">
+          <h3>Transfer funds</h3>
+          <p class="muted">Send money directly to another Apex Trust client account.</p>
+          <div id="transferBanner" class="banner hidden"></div>
+          <form id="transferForm" class="stack">
+            <label>Recipient account number
+              <input id="transferTo" type="text" placeholder="e.g. ACC-1002" required />
+            </label>
+            <label>Amount (ZWL)
+              <input id="transferAmount" type="number" step="0.01" placeholder="0.00" required />
+            </label>
+            <div class="quick-row">
+              <span>Quick amounts:</span>
+              <button type="button" class="chip btn-chip" data-amt="25">25</button>
+              <button type="button" class="chip btn-chip" data-amt="50">50</button>
+              <button type="button" class="chip btn-chip" data-amt="100">100</button>
+              <button type="button" class="chip btn-chip" data-amt="250">250</button>
+            </div>
+            <label>Memo
+              <input id="transferMemo" type="text" placeholder="e.g. Rent, settlement…" />
+            </label>
+            <button type="submit" class="btn primary" id="transferBtn">Send Transfer</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Transactions -->
+      <section id="panel-transactions" class="panel">
+        <div class="card">
+          <div class="card-head">
+            <h3>Account transactions</h3>
+            <div class="lookup">
+              <input id="txnAccount" type="text" placeholder="ACC-…" />
+              <button class="btn secondary" id="txnLoad" type="button">Load</button>
+            </div>
+          </div>
+          <div id="txnBanner" class="banner hidden"></div>
+          <div class="table-wrap">
+            <table class="txn-table">
+              <thead>
+                <tr><th>Date &amp; time</th><th>Type</th><th>Description</th><th>Account</th><th class="right">Amount</th></tr>
+              </thead>
+              <tbody id="txnBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Statements -->
+      <section id="panel-statements" class="panel">
+        <div class="card narrow">
+          <h3>Official account statement</h3>
+          <p class="muted">Download a signed PDF-style text statement including your registered address and full ledger.</p>
+          <div id="stmtBanner" class="banner hidden"></div>
+          <div class="registered" id="stmtHolder"></div>
+          <div class="lookup">
+            <input id="stmtAccount" type="text" placeholder="ACC-…" />
+            <button class="btn primary" id="stmtDownload" type="button">Download Statement</button>
+          </div>
+          <pre id="stmtPreview" class="stmt-preview hidden"></pre>
+        </div>
+      </section>
+
+      <!-- Profile -->
+      <section id="panel-profile" class="panel">
+        <div class="card narrow">
+          <h3>Profile settings</h3>
+          <div class="profile-grid">
+            <div><span class="plabel">Client name</span><span id="profileName">—</span></div>
+            <div><span class="plabel">Username</span><span id="profileUsername">—</span></div>
+            <div><span class="plabel">Client ID</span><span id="profileId">—</span></div>
+            <div><span class="plabel">Registered email</span><span id="profileEmail">—</span></div>
+          </div>
+          <div id="emailBanner" class="banner hidden"></div>
+          <form id="emailForm" class="stack">
+            <label>New email address
+              <input id="emailNew" type="email" placeholder="name@apexbank.test" required />
+            </label>
+            <label>Update email for client ID
+              <input id="emailTargetId" type="number" />
+            </label>
+            <button type="submit" class="btn primary">Save Email Address</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- API Keys -->
+      <section id="panel-apikey" class="panel">
+        <div class="card narrow">
+          <h3>Developer API credentials</h3>
+          <p class="muted">Your secret key grants programmatic access to the banking REST + GraphQL API.</p>
+          <div id="keyBanner" class="banner hidden"></div>
+          <div class="stack">
+            <label>Fetch key for client ID
+              <input id="keyUserId" type="number" />
+            </label>
+            <button class="btn secondary" id="keyLoad" type="button">Load Credentials</button>
+          </div>
+          <div id="keyBox" class="key-box hidden">
+            <span class="plabel">Production secret key</span>
+            <div class="key-row">
+              <code id="keyValue">—</code>
+              <button class="btn secondary" id="keyCopy" type="button">Copy</button>
+            </div>
+            <p class="fine-print">Keep this key secure. It provides programmatic access to execute transactions and query balances.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="bank-footer">
+      <p>© 2026 Apex Trust Bank of Zimbabwe. Member DFI. All rights reserved.</p>
+      <p class="lab-note">Loopback lab — this portal is <strong>deliberately vulnerable</strong>. SOC console: <a href="http://localhost:5100" target="_blank" rel="noreferrer">localhost:5100</a></p>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "loopback-target",
+  "version": "1.0.0",
+  "description": "Apex Trust Bank — deliberately vulnerable REST + GraphQL banking target for the Loopback correlation framework",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "graphql-yoga": "^6.0.1",
+    "express": "^4.21.2",
+    "graphql": "^16.9.0",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
