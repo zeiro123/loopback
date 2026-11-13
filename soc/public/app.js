@@ -380,9 +380,18 @@
     return `hsl(${hue}, 76%, 52%)`;
   }
 
+  // Alerts the operator has expanded — preserved across auto-refresh rebuilds
+  const expandedAlerts = new Set();
+  let lastAlertSig = '';
+
   function renderAlerts() {
     const alerts = filteredAlerts();
     $('alertsEmpty').classList.toggle('hidden', alerts.length > 0);
+    // Rebuild only when something actually changed — rebuilding the DOM every
+    // 2.5s collapsed the operator's expansion and could eat their clicks.
+    const sig = alerts.map((a) => a.id + ':' + JSON.stringify(a.response || {})).join('|');
+    if (sig === lastAlertSig && $('alertsList').children.length) return;
+    lastAlertSig = sig;
     const list = $('alertsList');
     list.innerHTML = '';
     for (const a of alerts) {
@@ -442,9 +451,15 @@
         </div>`;
       const expandBtn = card.querySelector('.alert-expand');
       const body = card.querySelector('.alert-body');
+      if (expandedAlerts.has(a.id)) {
+        body.classList.remove('hidden');
+        expandBtn.classList.add('open');
+      }
       expandBtn.addEventListener('click', () => {
         body.classList.toggle('hidden');
         expandBtn.classList.toggle('open');
+        if (body.classList.contains('hidden')) expandedAlerts.delete(a.id);
+        else expandedAlerts.add(a.id);
       });
       card.querySelector('[data-act="path"]').addEventListener('click', () => openPath(a));
       card.querySelector('[data-act="evidence"]').addEventListener('click', () => openEvidence(a));
