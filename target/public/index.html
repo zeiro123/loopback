@@ -86,7 +86,6 @@
         <button class="bank-tab" data-tab="statements" type="button">Statements</button>
         <button class="bank-tab" data-tab="blog" type="button">Blog</button>
         <button class="bank-tab" data-tab="careers" type="button">Careers</button>
-        <button class="bank-tab" data-tab="support" type="button">Support</button>
         <button class="bank-tab" data-tab="profile" type="button">Profile</button>
         <button class="bank-tab" data-tab="apikey" type="button">API Keys</button>
       </nav>
@@ -221,18 +220,7 @@
         </div>
       </section>
 
-      <!-- Support chat -->
-      <section id="panel-support" class="panel">
-        <div class="card narrow">
-          <h3>Apex Assist — Support Chat</h3>
-          <p class="muted">Ask about balances, transfers, statements or careers. Try mentioning an account number.</p>
-          <div id="chatLog" class="chat-log"><div class="chat-msg bot">Hello! I am the Apex Trust support assistant. Type "help" to see what I can do.</div></div>
-          <form id="chatForm" class="chat-input">
-            <input id="chatText" type="text" placeholder="Type a message…" autocomplete="off" />
-            <button class="btn primary" type="submit">Send</button>
-          </form>
-        </div>
-      </section>
+      <!-- Support chat lives in the floating Apex Assist widget (bottom-right) -->
 
       <!-- Profile -->
       <section id="panel-profile" class="panel">
@@ -305,6 +293,35 @@
       <p>© 2026 Apex Trust Bank of Zimbabwe. Member DFI. All rights reserved.</p>
       <p class="lab-note">Loopback lab — this portal is <strong>deliberately vulnerable</strong>. SOC console: <a href="http://localhost:5100" target="_blank" rel="noreferrer">localhost:5100</a></p>
     </footer>
+  </div>
+
+  <!-- floating Apex Assist widget -->
+  <div id="chatWidget" class="chat-widget hidden">
+    <div id="chatPanel" class="chat-panel hidden">
+      <div class="chat-panel-head">
+        <div class="chat-avatar">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="chat-head-meta">
+          <strong>Apex Assist</strong>
+          <span class="chat-status">support assistant &bull; online</span>
+        </div>
+        <button id="chatMin" class="chat-min" type="button" aria-label="Minimise chat">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </button>
+      </div>
+      <div id="chatLog" class="chat-log">
+        <div class="chat-msg bot">Hello! I am the Apex Trust support assistant. Type "help" to see what I can do.</div>
+      </div>
+      <form id="chatForm" class="chat-input">
+        <input id="chatText" type="text" placeholder="Type a message…" autocomplete="off" />
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    </div>
+    <button id="chatBubble" class="chat-bubble" type="button" aria-label="Open support chat">
+      <svg class="ic-open" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <svg class="ic-close" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
   </div>
 
   <div id="toast" class="toast hidden"></div>

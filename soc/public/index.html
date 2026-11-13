@@ -10,8 +10,10 @@
   <!-- ============ LOGIN GATE ============ -->
   <div id="gate" class="gate">
     <div class="gate-card">
-      <div class="gate-mark">◆</div>
-      <h1>LOOPBACK <span>SOC</span></h1>
+      <div class="gate-mark">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <h1 class="brand-title">LOOPBACK <span>SOC</span></h1>
       <p>Security Operations Center &bull; operator authentication</p>
       <div id="gateError" class="banner error hidden"></div>
       <form id="gateForm">
@@ -28,22 +30,42 @@
   <div id="console" class="shell hidden">
     <aside class="side">
       <div class="side-brand">
-        <div class="soc-mark">◆</div>
+        <div class="soc-mark">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
         <div>
-          <span class="side-name">LOOPBACK <span class="soc-badge">SOC</span></span>
-          <span class="side-sub">Defense Console v2</span>
+          <span class="side-name brand-title">LOOPBACK <span class="soc-badge">SOC</span></span>
+          <span class="side-sub">Defense Console v3</span>
         </div>
       </div>
       <nav class="side-nav">
-        <button class="nav-btn active" data-tab="overview" type="button">◈ Overview</button>
-        <button class="nav-btn" data-tab="traffic" type="button">⇄ Live Traffic</button>
-        <button class="nav-btn" data-tab="users" type="button">◉ Users</button>
-        <button class="nav-btn" data-tab="alerts" type="button">⚑ Alerts <span id="alertCount" class="pill hidden">0</span></button>
-        <button class="nav-btn" data-tab="actions" type="button">⚡ Response Actions</button>
-        <button class="nav-btn" data-tab="settings" type="button">⚙ Settings</button>
-        <button class="nav-btn" data-tab="api" type="button">⌘ API</button>
-        <button class="nav-btn" data-tab="manual" type="button">☰ Manual</button>
-        <button class="nav-btn" data-tab="terms" type="button">§ Terms</button>
+        <button class="nav-btn active" data-tab="overview" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Overview</button>
+        <button class="nav-btn" data-tab="traffic" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Live Traffic</button>
+        <button class="nav-btn" data-tab="users" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Users</button>
+        <button class="nav-btn" data-tab="alerts" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Alerts <span id="alertCount" class="pill hidden">0</span></button>
+        <button class="nav-btn" data-tab="actions" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Response Actions</button>
+        <button class="nav-btn" data-tab="settings" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings</button>
+        <button class="nav-btn" data-tab="api" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          API</button>
+        <button class="nav-btn" data-tab="manual" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Manual</button>
+        <button class="nav-btn" data-tab="terms" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 12h18"/></svg>
+          Terms</button>
       </nav>
       <div class="side-foot">
         <span class="mono muted" id="opName">operator: —</span>
@@ -158,9 +180,11 @@
           <span class="fchip" data-type="RESOURCE_ENUMERATION_ATTACK">ENUMERATION</span>
         </div>
         <div id="alertsEmpty" class="empty-state hidden">
-          <div class="empty-mark">✓</div>
+          <div class="empty-mark">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
           <h3>No threat alerts triggered</h3>
-          <p>All correlated session activity currently matches the baseline. Trigger detections from the banking portal: swap account numbers (IDOR), submit negative or overdraft transfers, or sweep several accounts quickly.</p>
+          <p>All correlated session activity currently matches the baseline — normal behaviour (signing in, checking your own balance, sending transfers) is never flagged. Detections fire only when a session crosses into another user's data: swap account numbers, probe other users' PII or API keys, sweep several accounts quickly, or abuse the chatbot to read foreign balances.</p>
         </div>
         <div id="alertsList" class="alerts-list"></div>
       </section>
@@ -214,60 +238,110 @@
 
       <!-- ========== API ========== -->
       <section id="panel-api" class="panel">
+        <div class="api-hero">
+          <div class="api-hero-icon">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <div>
+            <h2>SOC integration API</h2>
+            <p>Authenticate with the operator token (<code class="mono">Authorization: Bearer</code>) or the API key (<code class="mono">X-API-Key</code>). Every response is JSON.</p>
+          </div>
+        </div>
+        <div class="api-grid">
+          <div class="api-card">
+            <h4>Monitoring</h4>
+            <ul class="api-list">
+              <li><span class="method get">GET</span><code>/api/stats</code><span>live counters + severity breakdown</span></li>
+              <li><span class="method get">GET</span><code>/api/events?limit=100</code><span>merged REST + GraphQL stream with SQL pairs</span></li>
+              <li><span class="method get">GET</span><code>/api/alerts</code><span>alerts with attack paths + evidence</span></li>
+            </ul>
+          </div>
+          <div class="api-card">
+            <h4>Investigation</h4>
+            <ul class="api-list">
+              <li><span class="method get">GET</span><code>/api/users</code><span>every tracked user: IDs, IPs, devices, risk</span></li>
+              <li><span class="method get">GET</span><code>/api/users/:id</code><span>full investigation view for one actor</span></li>
+              <li><span class="method get">GET</span><code>/api/actions</code><span>response action log (manual + autonomous)</span></li>
+            </ul>
+          </div>
+          <div class="api-card">
+            <h4>Response</h4>
+            <ul class="api-list">
+              <li><span class="method post">POST</span><code>/api/actions</code><span>block_user / revoke_session / dismiss_alert</span></li>
+              <li><span class="method post">POST</span><code>/ingest</code><span>target pushes api_events + db_events</span></li>
+              <li><span class="method put">PUT</span><code>/api/settings</code><span>autonomous response policy</span></li>
+            </ul>
+          </div>
+          <div class="api-card">
+            <h4>GraphQL (read-only)</h4>
+            <pre class="code-block">POST /graphql
+
+query {
+  stats { apiEvents alerts blockedUsers }
+  users { username risk riskLevel }
+  alerts(limit: 5) { severity title }
+  actions(source: "autonomous") { kind reason }
+}</pre>
+          </div>
+        </div>
         <div class="card">
-          <h3>SOC REST API</h3>
-          <p class="muted">Authenticate with the operator token (Authorization: Bearer) or the API key (X-API-Key).</p>
-          <table class="grid-table">
-            <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
-            <tbody>
-              <tr><td>POST</td><td class="mono">/api/login</td><td>Operator login → token</td></tr>
-              <tr><td>GET</td><td class="mono">/api/stats</td><td>Live counters + severity breakdown</td></tr>
-              <tr><td>GET</td><td class="mono">/api/events?limit=100</td><td>Merged REST + GraphQL event stream with SQL pairs</td></tr>
-              <tr><td>GET</td><td class="mono">/api/alerts</td><td>All alerts with attack paths + evidence</td></tr>
-              <tr><td>GET</td><td class="mono">/api/users</td><td>Every tracked user: IDs, IPs, devices, risk</td></tr>
-              <tr><td>GET</td><td class="mono">/api/users/:id</td><td>Full investigation view for one actor</td></tr>
-              <tr><td>GET</td><td class="mono">/api/actions</td><td>Response action log (manual + autonomous)</td></tr>
-              <tr><td>POST</td><td class="mono">/api/actions</td><td>Apply a response action (block_user / revoke_session / dismiss_alert)</td></tr>
-              <tr><td>GET/PUT</td><td class="mono">/api/settings</td><td>Autonomous response policy</td></tr>
-              <tr><td>POST</td><td class="mono">/ingest</td><td>Target pushes api_events + db_events here</td></tr>
-            </tbody>
-          </table>
-          <h4 class="inner-title">GraphQL (read-only)</h4>
-          <p class="muted">POST /graphql — <code>{ stats { apiEvents alerts } alerts(limit: 5) { severity title } users { username risk riskLevel } actions(source: "autonomous") { kind reason } }</code></p>
-          <h4 class="inner-title">Ingest contract</h4>
-          <p class="muted mono small">POST /ingest { "events": [ { "kind": "api"|"db", "traceId": "…", "actorId": 1, "username": "Mary", "method": "GET", "endpoint": "/api/…", "statusCode": 200, "ip": "…", "userAgent": "…", "api": "rest"|"graphql", "operation": null, "params": {}, "resourceOwner": {"userId":2}, "meta": {} } ] }</p>
+          <h3>Ingest contract — what the target sends</h3>
+          <pre class="code-block">POST /ingest
+{
+  "events": [
+    {
+      "kind": "api" | "db",
+      "traceId": "uuid — the loopback join key",
+      "actorId": 1, "username": "Mary",
+      "method": "GET", "endpoint": "/api/statements/ACC-1002",
+      "statusCode": 200, "ip": "…", "userAgent": "…",
+      "api": "rest" | "graphql", "operation": null,
+      "params": {}, "resourceOwner": { "userId": 2, "accountNumber": "ACC-1002" },
+      "meta": { "amount": -150, "balanceBefore": 500, "balanceAfter": 650 }
+    }
+  ]
+}</pre>
         </div>
       </section>
 
       <!-- ========== MANUAL ========== -->
       <section id="panel-manual" class="panel">
-        <div class="card">
-          <h3>SOC operator manual</h3>
-          <ol class="manual-list">
-            <li><strong>Overview</strong> — live threat posture: counters, severity distribution, risk leaderboard, latest alerts and actions. Auto-refreshes every 2.5 s.</li>
-            <li><strong>Live Traffic</strong> — every REST + GraphQL request the bank processed, paired with the SQL it produced (trace join). Filter by API, user or endpoint.</li>
-            <li><strong>Users</strong> — every tracked actor with client ID, IPs, devices, request volume, errors, alerts and the live risk score. Click one to open the investigation view: risk breakdown with feature contributions, full activity log, response actions.</li>
-            <li><strong>Alerts</strong> — filter by severity and attack type. Each alert carries the detailed attack path (device → session → API → SQL → tables → impact) and raw evidence. Respond directly: Block User, Revoke Session, or Dismiss.</li>
-            <li><strong>Response Actions</strong> — the full audit of every action, manual or autonomous, with the reason that drove it.</li>
-            <li><strong>Settings</strong> — configure the autonomous response policy: severity thresholds and the risk-engine threshold. Rotate the SOC API key.</li>
-            <li><strong>Blocking</strong> — a blocked user loses all live sessions immediately, cannot sign in again, and receives HTTP 403 on every bank API call. Sessions revoked individually die instantly too.</li>
-            <li><strong>Triggering detections</strong> — from the bank on :5000: swap account numbers on statements/API keys (IDOR), submit negative or oversized transfers (business logic), sweep several accounts fast (enumeration). Each alert shows how the data traversed from the user's device to the database.</li>
-          </ol>
+        <div class="manual-hero">
+          <div class="manual-hero-icon">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <h2>SOC operator manual</h2>
+        </div>
+        <div class="manual-grid">
+          <div class="manual-card"><h4>Overview</h4><p>Live threat posture: counters, severity distribution, risk leaderboard, latest alerts and actions. Auto-refreshes every 2.5 seconds.</p></div>
+          <div class="manual-card"><h4>Live Traffic</h4><p>Every REST + GraphQL request the bank processed, paired with the SQL it produced via the trace join. Filter by API, user or endpoint.</p></div>
+          <div class="manual-card"><h4>Users</h4><p>Every tracked actor with client ID, IPs, devices, volume, alerts and live risk score. Click Investigate for the risk breakdown with feature contributions, the full activity log, and response actions.</p></div>
+          <div class="manual-card"><h4>Alerts</h4><p>Filter by severity and attack type. Each alert carries the detailed attack path — device, session, API, SQL, tables, impact — and raw evidence. Respond inline: Block User, Revoke Session, or Dismiss.</p></div>
+          <div class="manual-card"><h4>Normal vs malicious</h4><p>Signing in, checking your own balance, downloading your own statement, and sending transfers are never flagged. Detections fire only when a session crosses into data it does not own: other users' PII, statements, API keys, applications, or chatbot-mediated balances.</p></div>
+          <div class="manual-card"><h4>Response Actions</h4><p>The full audit of every action — manual or autonomous — with the reason that drove it. Autonomous entries cite the thresholds met and the alert that triggered them.</p></div>
+          <div class="manual-card"><h4>Blocking</h4><p>A blocked user loses all live sessions immediately, cannot sign in again, and receives HTTP 403 on every bank API call. Individually revoked sessions die instantly too.</p></div>
+          <div class="manual-card"><h4>Triggering detections</h4><p>From the bank on :5000: swap account numbers on statements or API keys (IDOR), submit negative or oversized transfers (business logic), sweep several accounts fast (enumeration), or ask the chatbot about another client's balance.</p></div>
         </div>
       </section>
 
       <!-- ========== TERMS ========== -->
       <section id="panel-terms" class="panel">
-        <div class="card">
-          <h3>Terms of use &amp; license</h3>
-          <p class="muted">Loopback is a capstone security research artefact (Apache-2.0 — see LICENSE in the repository).</p>
-          <div class="terms">
-            <p><strong>1. Synthetic data only.</strong> Every account, transaction, job application and chat message in this lab is synthetic. No real personal data, no real financial institution.</p>
-            <p><strong>2. Isolated use.</strong> The vulnerable target and the SOC are for local, isolated lab use. Do not deploy publicly and never point these tools at systems you do not own or have written authorization to test.</p>
-            <p><strong>3. Deliberate vulnerabilities.</strong> The bank intentionally contains BOLA/IDOR, business-logic and enumeration flaws for detection research. Its credentials (Mary/peter, admin/admin) are printed in the documentation and are not secrets.</p>
-            <p><strong>4. Autonomous actions.</strong> The SOC can autonomously block users and revoke sessions according to the configured policy. In this lab those actions only affect the synthetic target.</p>
-            <p><strong>5. No warranty.</strong> Provided "as is" under the Apache License, Version 2.0 — see the LICENSE file for the full terms and conditions.</p>
+        <div class="terms-hero">
+          <div class="terms-hero-icon">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 12h18"/></svg>
           </div>
+          <div>
+            <h2>Terms of use &amp; license</h2>
+            <p class="muted">Loopback is a capstone security research artefact, licensed Apache-2.0 — see the LICENSE file in the repository.</p>
+          </div>
+        </div>
+        <div class="terms-grid">
+          <div class="terms-card"><h4>1. Synthetic data only</h4><p>Every account, transaction, job application and chat message in this lab is synthetic. No real personal data, no real financial institution.</p></div>
+          <div class="terms-card"><h4>2. Isolated use</h4><p>The vulnerable target and the SOC are for local, isolated lab use. Do not deploy publicly and never point these tools at systems you do not own or have written authorization to test.</p></div>
+          <div class="terms-card"><h4>3. Deliberate vulnerabilities</h4><p>The bank intentionally contains BOLA/IDOR, business-logic, chatbot-leak and enumeration flaws for detection research. Its credentials (Mary/peter, admin/admin) are documented lab defaults, not secrets.</p></div>
+          <div class="terms-card"><h4>4. Autonomous actions</h4><p>The SOC can autonomously block users and revoke sessions according to the configured policy. In this lab those actions only affect the synthetic target.</p></div>
+          <div class="terms-card"><h4>5. No warranty</h4><p>Provided "as is" under the Apache License, Version 2.0 — see the LICENSE file for the full terms and conditions governing use, reproduction and distribution.</p></div>
+          <div class="terms-card"><h4>6. Attribution</h4><p>Built by Testimony Chimberengwa R236592N for the BSc Honors in Computer Engineering capstone at the University of Zimbabwe, supervised by Mr Makate.</p></div>
         </div>
       </section>
     </main>
@@ -285,6 +359,7 @@
         <button class="modal-close" id="pathClose" type="button">✕</button>
       </div>
       <div id="pathGraph" class="path-graph"></div>
+      <div id="pathNodeDetail" class="path-node-detail hidden"></div>
       <h4 class="section-label">Attack sequence</h4>
       <div id="pathSteps" class="path-steps"></div>
     </div>

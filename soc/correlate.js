@@ -231,6 +231,9 @@ export async function evaluateEvent(ev) {
     if (t) byClass.get(cls).add(String(t));
   }
   for (const [cls, targets] of byClass) {
+    // Normal transfers are not enumeration — a client may legitimately pay
+    // several beneficiaries in a minute. Business-logic rules cover transfers.
+    if (cls === 'api/transfers' || cls === 'support') continue;
     if (targets.size >= 3) {
       flags.push({
         kind: 'ENUM',

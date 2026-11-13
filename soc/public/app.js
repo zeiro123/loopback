@@ -437,11 +437,125 @@
     }
   }
 
-  /* ---------- attack path (layered SVG) ---------- */
+  /* ---------- attack path (interactive layered graph with icons) ---------- */
+  const LAYER_COLORS = {
+    device: '#fb7185', session: '#c084fc', endpoint: '#2dd4bf',
+    query: '#34d399', data: '#fbbf24', impact: '#a5b4fc',
+  };
+  const LAYER_TITLES = {
+    device: 'Client device', session: 'Session', endpoint: 'API endpoint',
+    query: 'Correlated SQL', data: 'Database tables', impact: 'Impact',
+  };
+
+  // Small stroke icons drawn per layer, centred at (cx, cy)
+  function layerIcon(layer, cx, cy, color) {
+    const s = `stroke="${color}" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+    switch (layer) {
+      case 'device': // laptop
+        return `<g ${s}><rect x="${cx - 9}" y="${cy - 7}" width="18" height="11" rx="1.5"/><path d="M${cx - 12} ${cy + 7} h24"/></g>`;
+      case 'session': // key
+        return `<g ${s}><circle cx="${cx - 4}" cy="${cy}" r="3.6"/><path d="M${cx - 0.4} ${cy} h10 M${cx + 6} ${cy} v4 M${cx + 9.6} ${cy} v3"/></g>`;
+      case 'endpoint': // globe
+        return `<g ${s}><circle cx="${cx}" cy="${cy}" r="8"/><path d="M${cx - 8} ${cy} h16 M${cx} ${cy - 8} c3 2.5 3 13.5 0 16 M${cx} ${cy - 8} c-3 2.5 -3 13.5 0 16"/></g>`;
+      case 'query': // database
+        return `<g ${s}><ellipse cx="${cx}" cy="${cy - 5}" rx="8" ry="3.2"/><path d="M${cx - 8} ${cy - 5} v10 c0 1.8 3.6 3.2 8 3.2 s8 -1.4 8 -3.2 v-10"/><path d="M${cx - 8} ${cy} c0 1.8 3.6 3.2 8 3.2 s8 -1.4 8 -3.2"/></g>`;
+      case 'data': // table
+        return `<g ${s}><rect x="${cx - 8}" y="${cy - 7}" width="16" height="14" rx="1.5"/><path d="M${cx - 8} ${cy - 2.5} h16 M${cx - 2.5} ${cy - 7} v14 M${cx + 3} ${cy - 7} v14"/></g>`;
+      case 'impact': // alert triangle
+        return `<g ${s}><path d="M${cx} ${cy - 8} l8 14 h-16 z"/><path d="M${cx} ${cy - 1} v3.5"/><circle cx="${cx}" cy="${cy + 4.2}" r="0.5"/></g>`;
+      default:
+        return `<circle cx="${cx}" cy="${cy}" r="6" ${s}/>`;
+    }
+  }
+
+  let pathPositions = [];
+
+  function renderPathGraph(nodes, edges) {
+    const W = 920, nodeW = 118, nodeH = 92, colW = 132, y0 = 58;
+    const cols = [...new Set(nodes.map((n) => n.layer || 'api'))];
+    const byLayer = new Map(cols.map((c) => [c, []]));
+    nodes.forEach((n) => byLayer.get(n.layer || 'api').push(n));
+    pathPositions = [];
+    let maxRows = 1;
+    cols.forEach((c, ci) => {
+      const arr = byLayer.get(c);
+      maxRows = Math.max(maxRows, arr.length);
+      arr.forEach((n, ri) => {
+        positions_push(n, 36 + ci * (nodeW + colW), y0 + ri * (nodeH + 22), ci);
+      });
+    });
+    function positions_push(n, x, y, col) { pathPositions.push({ node: n, x, y, col }); }
+
+    const H = y0 + maxRows * (nodeH + 22) + 46;
+    const header = cols.map((c, ci) => {
+      const x = 36 + ci * (nodeW + colW);
+      return `<text x="${x + nodeW / 2}" y="30" text-anchor="middle" fill="#93a89e" font-size="11" font-family="monospace" letter-spacing="1.5">${esc(String(c).toUpperCase())}</text>`;
+    }).join('');
+
+    const edgeLines = edges.map((e) => {
+      const f = pathPositions[e.from];
+      const t = pathPositions[e.to];
+      if (!f || !t) return '';
+      const x1 = f.x + nodeW, y1 = f.y + nodeH / 2;
+      const x2 = t.x, y2 = t.y + nodeH / 2;
+      const mid = (x1 + x2) / 2;
+      return `<path d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}" stroke="#2dd4bf66" fill="none" stroke-width="1.8" class="edge-anim"/>
+        <text x="${mid}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle" fill="#93a89e" font-size="9" font-family="monospace">${esc(e.label || '')}</text>`;
+    }).join('');
+
+    const nodeRects = pathPositions.map((p, i) => {
+      const color = LAYER_COLORS[p.node.layer] || '#2dd4bf';
+      const label = String(p.node.label || '').slice(0, 24);
+      const lines = wrapSvgText(String(p.node.details || ''), nodeW - 18, 8.5);
+      return `
+        <g class="pnode" data-idx="${i}">
+          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="12" fill="#111b17" stroke="${color}" stroke-width="1.6"/>
+          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="5" rx="2.5" fill="${color}"/>
+          ${layerIcon(p.node.layer, p.x + 22, p.y + 30, color)}
+          <text x="${p.x + 38}" y="${p.y + 28}" fill="#ecf3ee" font-size="9.5" font-weight="bold" font-family="monospace">${esc(String(p.node.layer || '').toUpperCase())}</text>
+          <text x="${p.x + 10}" y="${p.y + 52}" fill="#ecf3ee" font-size="9.5" font-weight="bold" font-family="monospace">${esc(label)}</text>
+          ${lines.map((l, li) => `<text x="${p.x + 10}" y="${p.y + 64 + li * 10}" fill="#93a89e" font-size="8.5" font-family="monospace">${esc(l)}</text>`).join('')}
+          <title>${esc(String(p.node.details || ''))}</text>
+        </g>`;
+    }).join('');
+
+    $('pathGraph').innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${header}${edgeLines}${nodeRects}</svg>`;
+
+    // Interactivity: click a node to open its full details below the graph
+    $('pathGraph').querySelectorAll('.pnode').forEach((el) => {
+      el.addEventListener('click', () => {
+        $('pathGraph').querySelectorAll('.pnode').forEach((n) => n.classList.remove('selected'));
+        el.classList.add('selected');
+        const p = pathPositions[Number(el.dataset.idx)];
+        const color = LAYER_COLORS[p.node.layer] || '#2dd4bf';
+        const box = $('pathNodeDetail');
+        box.style.borderLeftColor = color;
+        box.innerHTML = `
+          <h4 style="color:${color}">${esc(LAYER_TITLES[p.node.layer] || p.node.layer)} — ${esc(p.node.label)}</h4>
+          <p>${esc(p.node.details)}</p>
+          ${(p.node.statements || []).map((s) => `<p class="mono" style="font-size:11px;color:#99f6e4">↳ ${esc(s)}</p>`).join('')}`;
+        box.classList.remove('hidden');
+      });
+    });
+  }
+
+  function wrapSvgText(text, maxW, size) {
+    const charsPerLine = Math.floor(maxW / (size * 0.5));
+    const words = String(text).split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).length > charsPerLine) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
+    }
+    if (cur) lines.push(cur);
+    return lines.slice(0, 3);
+  }
+
   function openPath(a) {
     $('pathTitle').textContent = a.title;
     $('pathSub').textContent = `${a.alert_type} • ${a.severity} • trace ${String(a.evidence?.traceId || '').slice(0, 8)}`;
     const ap = a.attack_path || {};
+    $('pathNodeDetail').classList.add('hidden');
     renderPathGraph(ap.nodes || [], ap.edges || []);
     const stepsEl = $('pathSteps');
     stepsEl.innerHTML = '';
@@ -458,70 +572,6 @@
       stepsEl.appendChild(row);
     }
     $('pathModal').classList.remove('hidden');
-  }
-
-  const LAYER_COLORS = {
-    device: '#fb7185', session: '#a78bfa', endpoint: '#22d3ee',
-    query: '#34d399', data: '#fbbf24', impact: '#818cf8',
-  };
-
-  function renderPathGraph(nodes, edges) {
-    const W = 760, colW = 120, nodeW = 112, nodeH = 74, y0 = 46;
-    const cols = [...new Set(nodes.map((n) => n.layer || 'api'))];
-    const byLayer = new Map(cols.map((c) => [c, []]));
-    nodes.forEach((n) => byLayer.get(n.layer || 'api').push(n));
-    const positions = [];
-    let maxRows = 1;
-    cols.forEach((c, ci) => {
-      const arr = byLayer.get(c);
-      maxRows = Math.max(maxRows, arr.length);
-      arr.forEach((n, ri) => {
-        const x = 30 + ci * (nodeW + colW);
-        const y = y0 + ri * (nodeH + 16);
-        positions.push({ node: n, x, y, col: ci });
-      });
-    });
-    const H = y0 + maxRows * (nodeH + 16) + 40;
-    const labels = cols.map((c, ci) => {
-      const x = 30 + ci * (nodeW + colW);
-      return `<text x="${x + nodeW / 2}" y="26" text-anchor="middle" fill="#8395b3" font-size="10" font-family="monospace" letter-spacing="1">${esc(c.toUpperCase())}</text>`;
-    }).join('');
-    const edgeLines = edges.map((e) => {
-      const f = positions[e.from];
-      const t = positions[e.to];
-      if (!f || !t) return '';
-      const x1 = f.x + nodeW, y1 = f.y + nodeH / 2;
-      const x2 = t.x, y2 = t.y + nodeH / 2;
-      const mid = (x1 + x2) / 2;
-      return `<path d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}" stroke="#2dd4bf55" fill="none" stroke-width="1.6"/>
-        <text x="${mid}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle" fill="#8395b3" font-size="8" font-family="monospace">${esc(e.label || '')}</text>`;
-    }).join('');
-    const nodeRects = positions.map((p) => {
-      const color = LAYER_COLORS[p.node.layer] || '#22d3ee';
-      const label = String(p.node.label || '').slice(0, 26);
-      const detail = String(p.node.details || '').slice(0, 60);
-      return `
-        <g>
-          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="10" fill="#0d1322" stroke="${color}" stroke-width="1.4"/>
-          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="4" rx="2" fill="${color}"/>
-          <text x="${p.x + 8}" y="${p.y + 22}" fill="#e6edf7" font-size="9" font-weight="bold" font-family="monospace">${esc(label)}</text>
-          ${wrapSvgText(detail, p.x + 8, p.y + 36, nodeW - 16, 9)}
-        </g>`;
-    }).join('');
-    $('pathGraph').innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${labels}${edgeLines}${nodeRects}</svg>`;
-  }
-
-  function wrapSvgText(text, x, y, maxW, size) {
-    const charsPerLine = Math.floor(maxW / (size * 0.52));
-    const words = String(text).split(' ');
-    const lines = [];
-    let cur = '';
-    for (const w of words) {
-      if ((cur + ' ' + w).length > charsPerLine) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
-    }
-    if (cur) lines.push(cur);
-    return lines.slice(0, 4).map((l, i) =>
-      `<text x="${x}" y="${y + i * (size + 2)}" fill="#8395b3" font-size="${size}" font-family="monospace">${esc(l)}</text>`).join('');
   }
 
   $('pathClose').addEventListener('click', () => $('pathModal').classList.add('hidden'));

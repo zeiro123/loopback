@@ -286,7 +286,6 @@ const resolvers = {
             : `Received from ${user.name} (${source.account_number}): ${memo || 'Transfer'}`,
         });
       }
-      setResourceOwner(target ? { userId: target.user_id, accountNumber: target.account_number } : null);
       setMeta({
         amount: numAmount, balanceBefore, balanceAfter, toAccountNumber,
         targetOwnerUserId: target?.user_id ?? null, sourceAccountNumber: source.account_number,
@@ -351,11 +350,15 @@ const resolvers = {
       const user = await traceUser();
       const account = user ? await getAccountByUserId(user.id) : null;
       await saveChat({ convoId: cid, userId: user?.id ?? null, role: 'user', text: message });
-      const reply = await chatbotRespond(message, {
+      const { text: reply, leaked, account: leakedAccount } = await chatbotRespond(message, {
         user,
         account,
         lookupAccount: (num) => getAccountByNumber(num), // VULN: reads any account
       });
+      if (leaked && leakedAccount) {
+        setResourceOwner({ userId: leakedAccount.user_id, accountNumber: leakedAccount.account_number });
+        setMeta({ chatbotLeak: true, leakedAccountNumber: leakedAccount.account_number });
+      }
       await saveChat({ convoId: cid, userId: user?.id ?? null, role: 'bot', text: reply });
       return { reply, convoId: cid };
     },

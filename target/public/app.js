@@ -51,6 +51,8 @@
     sessionStorage.removeItem(TOKEN_KEY);
     $('appView').classList.add('hidden');
     $('authView').classList.remove('hidden');
+    $('chatWidget').classList.add('hidden');
+    $('chatPanel').classList.add('hidden');
   }
 
   function saveSession() { sessionStorage.setItem(TOKEN_KEY, state.token); }
@@ -143,6 +145,7 @@
   function enterApp() {
     $('authView').classList.add('hidden');
     $('appView').classList.remove('hidden');
+    $('chatWidget').classList.remove('hidden');
     $('headerName').textContent = state.user.name;
     $('profileName').textContent = state.user.name;
     $('profileUsername').textContent = state.user.username;
@@ -495,7 +498,7 @@
     }
   }
 
-  /* ---------- support chat ---------- */
+  /* ---------- support chat (floating Apex Assist widget) ---------- */
   function chatAppend(role, text) {
     const log = $('chatLog');
     const el = document.createElement('div');
@@ -504,6 +507,17 @@
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
   }
+
+  $('chatBubble').addEventListener('click', () => {
+    const panel = $('chatPanel');
+    panel.classList.toggle('hidden');
+    $('chatBubble').classList.toggle('open', !panel.classList.contains('hidden'));
+  });
+
+  $('chatMin').addEventListener('click', () => {
+    $('chatPanel').classList.add('hidden');
+    $('chatBubble').classList.remove('open');
+  });
 
   $('chatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
