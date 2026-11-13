@@ -490,6 +490,18 @@ export async function getJob(id) {
   return rows[0];
 }
 
+export async function searchJobs(q) {
+  const term = `%${String(q || '').trim()}%`;
+  const { rows } = await tq(
+    `SELECT j.*, (SELECT COUNT(*)::int FROM job_applications a WHERE a.job_id = j.id) AS application_count
+     FROM jobs j
+     WHERE j.title ILIKE $1 OR j.department ILIKE $1 OR j.description ILIKE $1
+     ORDER BY j.posted_at DESC`,
+    [term]
+  );
+  return rows;
+}
+
 export async function createApplication({ jobId, userId, coverLetter }) {
   const { rows } = await tq(
     'INSERT INTO job_applications (job_id, user_id, cover_letter) VALUES ($1,$2,$3) RETURNING *',

@@ -420,12 +420,23 @@
   });
 
   /* ---------- careers ---------- */
-  async function loadCareers() {
+  async function loadCareers(q) {
     const wrap = $('jobsItems');
     wrap.innerHTML = '<div class="mini-txn"><span class="when">Loading openings…</span></div>';
     try {
-      const [jobsRes, appsRes] = await Promise.all([api('/api/jobs'), api('/api/applications/mine')]);
+      const url = q ? `/api/jobs/search?q=${encodeURIComponent(q)}` : '/api/jobs';
+      const [jobsRes, appsRes] = await Promise.all([api(url), api('/api/applications/mine')]);
       wrap.innerHTML = '';
+      // VULNERABLE SINK: the server reflects the raw search query back and the
+      // header is rendered as HTML — a payload like <img src=x onerror=alert(1)>
+      // executes here (reflected XSS the SOC ladders per attempt).
+      if (q && jobsRes.ok && jobsRes.data.success) {
+        $('jobSearchOut').innerHTML = `Results for: ${jobsRes.data.q} — ${jobsRes.data.count} match(es)`;
+      } else if (q) {
+        $('jobSearchOut').textContent = 'Search failed.';
+      } else {
+        $('jobSearchOut').innerHTML = '';
+      }
       if (!jobsRes.ok || !jobsRes.data.success) {
         wrap.innerHTML = '<div class="mini-txn"><span class="when">Sign in to view and apply for openings.</span></div>';
         return;
@@ -458,6 +469,11 @@
       wrap.innerHTML = '<div class="mini-txn"><span class="when">Network error.</span></div>';
     }
   }
+
+  $('jobSearchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    loadCareers($('jobSearchQ').value.trim());
+  });
 
   async function applyJob(jobId, btn) {
     const cover = $(`cover-${jobId}`)?.value?.trim();

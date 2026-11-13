@@ -22,13 +22,13 @@ import {
   createTransaction, debit, credit, safeUser,
   createSession, getSessionUser, deleteSession,
   listBlogPosts, getBlogPost, listComments, addComment,
-  listJobs, getJob, createApplication, listApplicationsForUser, getApplication, withdrawApplication,
+  listJobs, getJob, searchJobs, createApplication, listApplicationsForUser, getApplication, withdrawApplication,
   saveChat, listChat,
   isUserBlocked, isSessionRevoked,
 } from './db.js';
 import { buildStatement } from './db.js';
 import {
-  traceMiddleware, setActor, setParams, setResourceOwner, setMeta,
+  traceMiddleware, setActor, setParams, setResourceOwner, setMeta, als,
 } from './trace.js';
 import { chatbotRespond } from './chatbot.js';
 import { handleControl, handleControlPoll } from './controls.js';
@@ -291,18 +291,63 @@ app.get('/api/statements/:accountNumber', async (req, res) => {
   res.json({ success: true, statement: built.statement, textDocument: built.textDocument });
 });
 
-// PUT /api/users/:id/email — VULN: cross-user modification
+// PUT /api/users/:id/email — VULNERABLE TO SQL INJECTION: the email value is
+// interpolated straight into the UPDATE statement. Payloads like
+//   x@y.z' AND 1=(SELECT 1/0)-- -        (error-based)
+//   x@y.z'; SELECT pg_sleep(2)-- -       (stacked)
+// execute against the database; the SOC ladders the alert severity per attempt.
 app.put('/api/users/:id/email', async (req, res) => {
   if (!guard(req, res)) return;
   const { email } = req.body || {};
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     return res.status(400).json({ success: false, error: 'A valid email address is required' });
   }
-  const target = await getUserById(req.params.id);
-  const updated = await updateUserEmail(req.params.id, email.trim());
-  if (!updated) return res.status(404).json({ success: false, error: 'User not found' });
+  const value = email.trim();
+  const before = await getUserById(req.params.id);
+  setParams({ email: value });
+
+  // SQLi signature detection for the SOC
+  const sqliSig = /(' |--|;|\/\*|\bunion\b|\bselect\b|\bor\b\s+\d|\bpg_sleep\b|\bdrop\b|\bsleep\b)/i.test(value);
+  let dbError = null;
+  let updated = null;
+  try {
+    // DELIBERATELY VULNERABLE: string-interpolated SQL (not parameterized).
+    const result = await pool.query(
+      `UPDATE users SET email = '${value}' WHERE id = ${Number(req.params.id)} RETURNING *`
+    );
+    updated = result.rows[0];
+  } catch (err) {
+    dbError = err.message;
+  }
+
+  const attempted = sqliSig || dbError;
+  const meta = { changedFrom: before?.email ?? null, changedTo: value };
+  if (attempted) {
+    meta.sqli_attempt = true;
+    meta.sqli_error = dbError;
+    meta.payload = value.slice(0, 140);
+  }
+  setMeta(meta);
+
+  if (attempted) {
+    // Put the malformed statement on the trace so the attack path shows it.
+    const store = als.getStore();
+    store?.dbEvents.push({
+      kind: 'db',
+      ts: new Date().toISOString(),
+      traceId: store.traceId,
+      actorId: store.actorId ?? null,
+      username: store.username ?? null,
+      query: `UPDATE users SET email = '${value}' WHERE id = ${Number(req.params.id)}`,
+      template: `UPDATE users SET email = '${value}' WHERE id = ?`.slice(0, 200),
+      rowCount: 0,
+    });
+  }
+
+  if (dbError && !updated) {
+    return res.status(500).json({ success: false, error: 'Email update failed', detail: dbError });
+  }
   setResourceOwner({ userId: updated.id });
-  setMeta({ changedFrom: target?.email ?? null, changedTo: email.trim() });
   res.json({ success: true, message: `Email updated for user ID ${updated.id}`, user: safeUser(updated) });
 });
 
@@ -382,6 +427,20 @@ app.post('/api/blog/posts/:id/comments', async (req, res) => {
 app.get('/api/jobs', async (_req, res) => {
   const jobs = await listJobs();
   res.json({ success: true, count: jobs.length, jobs });
+});
+
+// GET /api/jobs/search?q=… — VULN: the raw query is reflected unencoded back
+// into the page (the UI renders it via innerHTML), so payloads like
+// <img src=x onerror=alert(1)> execute in the client session.
+app.get('/api/jobs/search', async (req, res) => {
+  const q = String(req.query.q || '');
+  setParams({ q });
+  const xssSig = /(<\s*script|onerror|onload|onmouseover|onfocus|javascript:|<img|<svg|<iframe|alert\s*\()/i.test(q);
+  if (xssSig) {
+    setMeta({ xss_attempt: true, payload: q.slice(0, 140) });
+  }
+  const jobs = await searchJobs(q);
+  res.json({ success: true, q, count: jobs.length, jobs });
 });
 
 app.get('/api/jobs/:id', async (req, res) => {

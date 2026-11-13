@@ -234,7 +234,8 @@ body { font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif; backgroun
 .btn.brain:hover { background: rgba(13,148,136,.3); }
 
 /* ---------- attack path (interactive layered graph) ---------- */
-.path-graph { background: radial-gradient(600px 200px at 50% 0%, rgba(45,212,191,.06), transparent), var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 12px; margin-bottom: 16px; overflow-x: auto; }
+.path-zoom { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
+.path-graph { background: radial-gradient(600px 200px at 50% 0%, rgba(45,212,191,.06), transparent), var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 12px; margin-bottom: 18px; overflow: auto; }
 .path-graph svg { min-width: 860px; display: block; }
 .pnode { cursor: pointer; }
 .pnode:hover rect { stroke-width: 2.6; filter: brightness(1.25); }

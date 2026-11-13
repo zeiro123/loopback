@@ -179,6 +179,8 @@
           <span class="fchip" data-type="POSSIBLE_BUSINESS_LOGIC_ATTACK">BUSINESS LOGIC</span>
           <span class="fchip" data-type="RESOURCE_ENUMERATION_ATTACK">ENUMERATION</span>
           <span class="fchip" data-type="SUSPICIOUS_SESSION_ANOMALY">SESSION HIJACK</span>
+          <span class="fchip" data-type="REFLECTED_XSS_ATTACK">XSS</span>
+          <span class="fchip" data-type="SQL_INJECTION_ATTACK">SQLi</span>
         </div>
         <div id="alertsEmpty" class="empty-state hidden">
           <div class="empty-mark">
@@ -358,6 +360,13 @@ query {
           <span class="muted mono" id="pathSub">—</span>
         </div>
         <button class="modal-close" id="pathClose" type="button">✕</button>
+      </div>
+      <div class="path-zoom">
+        <span class="muted">Zoom:</span>
+        <button class="btn ghost small" id="zoomOut" type="button">−</button>
+        <span class="mono muted" id="zoomLevel">100%</span>
+        <button class="btn ghost small" id="zoomIn" type="button">+</button>
+        <button class="btn ghost small" id="zoomReset" type="button">Reset</button>
       </div>
       <div id="pathGraph" class="path-graph"></div>
       <div id="pathNodeDetail" class="path-node-detail hidden"></div>

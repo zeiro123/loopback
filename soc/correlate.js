@@ -59,9 +59,6 @@ async function buildAttackPath(ev, kind) {
   const queries = await dbEventsForTrace(ev.trace_id);
   const queryTemplates = queries.map((q) => q.template);
   const tables = tablesOf(queries);
-  const queryLabel = queryTemplates.length
-    ? `${queryTemplates.length} SQL statement(s) on ${tables.length || 'no'} table(s)`
-    : 'No SQL captured for this trace';
   const ro = ev.resource_owner || {};
   const target = ro.accountNumber
     ? `Account ${ro.accountNumber} (owner user ${ro.userId ?? '?'})`
@@ -69,15 +66,7 @@ async function buildAttackPath(ev, kind) {
     ? `User ${ro.userId}`
     : 'Target object';
 
-  const impacts = {
-    IDOR: ev.status_code === 200
-      ? 'Unauthorized object data exposed (HTTP 200)'
-      : 'Object access probed / rejected',
-    BIZLOGIC: 'Ledger invariant violated — balance manipulated',
-    ENUM: 'Horizontal resource enumeration sweep',
-  };
-
-  // Layered data-traversal graph: device → session → api → sql → data → impact
+  const meta = ev.meta || {};
   const nodes = [
     {
       layer: 'device', type: 'device', label: 'Client device',
@@ -88,9 +77,88 @@ async function buildAttackPath(ev, kind) {
       details: `token ${String(ev.session_token || 'anon').slice(0, 14)}… • actor ${actor}`,
     },
     {
-      layer: 'api', type: 'endpoint', label: endpoint,
+      layer: 'endpoint', type: 'endpoint', label: endpoint,
       details: `${String(ev.api || 'rest').toUpperCase()}${ev.operation ? ` • ${ev.operation}` : ''} → HTTP ${ev.status_code} • server: loopback-target`,
     },
+  ];
+  let edges;
+  let steps;
+
+  if (kind === 'XSS') {
+    // Topology for client-side injection: the payload is reflected and EXECUTES
+    // in the browser — no database involved.
+    nodes.push(
+      {
+        layer: 'reflection', type: 'query', label: 'Reflected input',
+        details: `Raw query echoed to the page: ${String(meta.payload || ev.meta?.payload || '').slice(0, 90)}`,
+      },
+      {
+        layer: 'sink', type: 'data', label: 'Browser DOM sink',
+        details: 'innerHTML sink on the careers page — <img src=x onerror=…> executes arbitrary JavaScript in the client session',
+      },
+      {
+        layer: 'impact', type: 'impact', label: 'Arbitrary JavaScript executed',
+        details: `Client session compromised (cookies, actions in the victim's name) • trace ${String(ev.trace_id).slice(0, 8)}…`,
+      }
+    );
+    edges = nodes.slice(0, -1).map((n, i) => ({ from: i, to: i + 1, label: ['originates from', 'authenticates to', 'reflects payload', 'executes in'][i] }));
+    steps = [
+      { step: 1, phase: 'Device', title: 'Request originated', description: `Client device at ${ev.ip || 'unknown IP'} (${String(ev.user_agent || 'unknown UA').slice(0, 70)}) sent the crafted search query.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 2, phase: 'Session', title: 'Authenticated actor', description: `${actor} probed the careers search.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 3, phase: 'API call', title: endpoint, description: `The search handler echoes the raw query back in the JSON response.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 4, phase: 'Reflection', title: 'Payload reflected unencoded', description: `Raw value rendered via an innerHTML sink: ${String(meta.payload || '').slice(0, 90)}`, status: 'FLAGGED', ts: ev.ts },
+      { step: 5, phase: 'Client execution', title: 'JavaScript executed in browser', description: 'The browser parses the reflected markup — onerror fires, arbitrary script runs in the victim session.', status: 'FLAGGED', ts: ev.ts },
+      { step: 6, phase: 'Detection', title: 'Loopback alert raised', description: `Probing ladder: severity starts at 1% and rises 2% per distinct payload attempt.`, status: 'FLAGGED', ts: ev.ts },
+    ];
+    return { nodes, edges, steps };
+  }
+
+  if (kind === 'SQLI') {
+    // Topology for server-side injection: the payload breaks out into the SQL
+    // statement and reaches the database directly.
+    nodes.push(
+      {
+        layer: 'query', type: 'query', label: 'Malformed SQL',
+        details: queryTemplates.length
+          ? `Interpolated statement: ${queryTemplates[0]}`
+          : 'Statement interpolated from user input',
+        statements: queryTemplates,
+      },
+      {
+        layer: 'database', type: 'data', label: 'PostgreSQL (loopback db)',
+        details: `${tables.length ? `Tables: ${tables.join(', ')} • ` : ''}${meta.sqli_error ? `DB error captured: ${String(meta.sqli_error).slice(0, 90)}` : 'statement executed against the database'}`,
+      },
+      {
+        layer: 'impact', type: 'impact', label: 'Database manipulation / exposure',
+        details: `Attackers can read or modify any table the app user can • trace ${String(ev.trace_id).slice(0, 8)}…`,
+      }
+    );
+    edges = nodes.slice(0, -1).map((n, i) => ({ from: i, to: i + 1, label: ['originates from', 'authenticates to', 'interpolates into', 'executes against'][i] }));
+    steps = [
+      { step: 1, phase: 'Device', title: 'Request originated', description: `Client device at ${ev.ip || 'unknown IP'} (${String(ev.user_agent || 'unknown UA').slice(0, 70)}) submitted the crafted value.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 2, phase: 'Session', title: 'Authenticated actor', description: `${actor} probed the email update.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 3, phase: 'API call', title: endpoint, description: `The handler interpolates the value straight into the UPDATE statement.`, status: 'SUCCESS', ts: ev.ts },
+      { step: 4, phase: 'Loopback join', title: 'Malformed SQL captured', description: `trace ${ev.trace_id} produced: ${queryTemplates.join(' | ') || 'no SQL'}.`, status: 'FLAGGED', ts: ev.ts },
+      { step: 5, phase: 'Database', title: 'Reached PostgreSQL', description: meta.sqli_error ? `Database rejected/errored: ${String(meta.sqli_error).slice(0, 100)}` : 'Statement executed against the database.', status: 'FLAGGED', ts: ev.ts },
+      { step: 6, phase: 'Detection', title: 'Loopback alert raised', description: `Probing ladder: severity starts at 1% and rises 2% per distinct payload attempt.`, status: 'FLAGGED', ts: ev.ts },
+    ];
+    return { nodes, edges, steps };
+  }
+
+  // Generic topology: IDOR / business logic / enumeration / hijack
+  const queryLabel = queryTemplates.length
+    ? `${queryTemplates.length} SQL statement(s) on ${tables.length || 'no'} table(s)`
+    : 'No SQL captured for this trace';
+  const impacts = {
+    IDOR: ev.status_code === 200
+      ? 'Unauthorized object data exposed (HTTP 200)'
+      : 'Object access probed / rejected',
+    BIZLOGIC: 'Ledger invariant violated — balance manipulated',
+    ENUM: 'Horizontal resource enumeration sweep',
+    HIJACK: 'Session hijacked — attacker acts as the victim',
+  };
+
+  nodes.push(
     {
       layer: 'sql', type: 'query', label: 'Correlated SQL',
       details: queryTemplates.length
@@ -105,18 +173,18 @@ async function buildAttackPath(ev, kind) {
     {
       layer: 'impact', type: 'impact', label: impacts[kind] || 'Anomalous activity',
       details: `trace ${String(ev.trace_id).slice(0, 8)}… • detection: sequence rules over the ${WINDOW_SECONDS}s session window`,
-    },
-  ];
-  const edges = nodes.slice(0, -1).map((n, i) => ({
+    }
+  );
+  edges = nodes.slice(0, -1).map((n, i) => ({
     from: i,
     to: i + 1,
     label: ['originates from', 'authenticates to', 'produces', 'reads / writes', 'results in'][i],
   }));
 
-  const steps = [
+  steps = [
     { step: 1, phase: 'Device', title: 'Request originated', description: `Client device at ${ev.ip || 'unknown IP'} (${String(ev.user_agent || 'unknown UA').slice(0, 70)}) sent the request.`, status: 'SUCCESS', ts: ev.ts },
     { step: 2, phase: 'Session', title: 'Authenticated actor', description: `${actor} acted with a valid session token.`, status: 'SUCCESS', ts: ev.ts },
-    { step: 3, phase: 'API call', title: endpoint, description: `${String(ev.api || 'rest').toUpperCase()} request${ev.operation ? ` (${ev.operation})` : ''} on loopback-target returned HTTP ${ev.status_code}.`, status: 'SUCCESS', ts: ev.ts },
+    { step: 3, phase: 'API call', title: `${endpoint}`, description: `${String(ev.api || 'rest').toUpperCase()} request${ev.operation ? ` (${ev.operation})` : ''} on loopback-target returned HTTP ${ev.status_code}.`, status: 'SUCCESS', ts: ev.ts },
     { step: 4, phase: 'Loopback join', title: 'Request bound to SQL', description: `trace ${ev.trace_id} produced: ${queryTemplates.join(' | ') || 'no SQL'}.`, status: 'FLAGGED', ts: ev.ts },
     { step: 5, phase: 'Data traversal', title: `Touched ${tables.length ? tables.join(', ') : 'no tables'}`, description: `Target object reached: ${target}. Rows returned: ${queries.reduce((n, q) => n + (q.row_count || 0), 0)}.`, status: kind === 'IDOR' && ev.status_code === 200 ? 'FLAGGED' : 'SUCCESS', ts: ev.ts },
     { step: 6, phase: 'Detection', title: 'Loopback alert raised', description: `Sequence-level detector flagged this session activity — severity computed over the ${WINDOW_SECONDS}s window, not the single request.`, status: 'FLAGGED', ts: ev.ts },
@@ -129,6 +197,8 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
   const alertType = kind === 'IDOR' ? 'POSSIBLE_IDOR_ATTACK'
     : kind === 'BIZLOGIC' ? 'POSSIBLE_BUSINESS_LOGIC_ATTACK'
     : kind === 'HIJACK' ? 'SUSPICIOUS_SESSION_ANOMALY'
+    : kind === 'XSS' ? 'REFLECTED_XSS_ATTACK'
+    : kind === 'SQLI' ? 'SQL_INJECTION_ATTACK'
     : 'RESOURCE_ENUMERATION_ATTACK';
   // Count the actor's prior alerts of the SAME TYPE — this is what makes the
   // severity percentage escalate as their actions repeat.
@@ -145,24 +215,30 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
   const attempts = priorCount + 1;
 
   let severity;
-  if (kind === 'IDOR') {
-    severity = isCross && attempts >= 3 ? 'CRITICAL' : isCross ? 'HIGH' : attempts >= 3 ? 'HIGH' : attempts === 2 ? 'MEDIUM' : 'INFO';
-  } else if (kind === 'BIZLOGIC') {
-    severity = isCross || attempts >= 3 ? 'CRITICAL' : 'HIGH';
-  } else if (kind === 'HIJACK') {
-    severity = 'HIGH';
+  let severityPct;
+  if (kind === 'XSS' || kind === 'SQLI') {
+    // Probing ladders: start at 1% and rise 2% per distinct payload attempt.
+    severityPct = Math.min(99, 1 + (attempts - 1) * 2);
+    severity = severityPct < 25 ? 'INFO' : severityPct < 50 ? 'MEDIUM' : severityPct < 75 ? 'HIGH' : 'CRITICAL';
   } else {
-    severity = isCross || attempts >= 4 ? 'CRITICAL' : 'HIGH';
+    if (kind === 'IDOR') {
+      severity = isCross && attempts >= 3 ? 'CRITICAL' : isCross ? 'HIGH' : attempts >= 3 ? 'HIGH' : attempts === 2 ? 'MEDIUM' : 'INFO';
+    } else if (kind === 'BIZLOGIC') {
+      severity = isCross || attempts >= 3 ? 'CRITICAL' : 'HIGH';
+    } else if (kind === 'HIJACK') {
+      severity = 'HIGH';
+    } else {
+      severity = isCross || attempts >= 4 ? 'CRITICAL' : 'HIGH';
+    }
+    // Severity as a percentage (0–100), escalating with the actor's alert count:
+    // a single cross-object access is LOW (~10%) and the score climbs as their
+    // actions become more suspicious. The UI renders it as a closing ring on a
+    // continuous green → red scale.
+    const levelBase = { INFO: 10, MEDIUM: 35, HIGH: 65, CRITICAL: 88 }[severity] ?? 40;
+    const attemptBoost = Math.min(25, (attempts - 1) * 9); // every prior alert escalates the score
+    const crossBoost = isCross ? 6 : 0;
+    severityPct = Math.min(99, levelBase + attemptBoost + crossBoost);
   }
-
-  // Severity as a percentage (0–100), escalating with the actor's alert count:
-  // a single cross-object access is LOW (~10%) and the score climbs as their
-  // actions become more suspicious. The UI renders it as a closing ring on a
-  // continuous green → red scale.
-  const levelBase = { INFO: 10, MEDIUM: 35, HIGH: 65, CRITICAL: 88 }[severity] ?? 40;
-  const attemptBoost = Math.min(25, (attempts - 1) * 9); // every prior alert escalates the score
-  const crossBoost = isCross ? 6 : 0;
-  const severityPct = Math.min(99, levelBase + attemptBoost + crossBoost);
 
   const affected = [...new Set(windowEvs.map((w) => w.endpoint.split('?')[0]))].slice(-6);
   const attackPath = await buildAttackPath(ev, kind);
@@ -267,6 +343,24 @@ export async function evaluateEvent(ev) {
       });
       break; // one enumeration alert per event
     }
+  }
+
+  /* --- 5. Reflected XSS probing (careers search) --------------------------- */
+  if (meta.xss_attempt) {
+    flags.push({
+      kind: 'XSS',
+      title: 'Reflected XSS Probing: Payload in Careers Search',
+      summary: `${ev.username} submitted XSS payloads to the careers search ("${String(meta.payload || '').slice(0, 70)}"). The query is reflected unencoded back into the page — arbitrary JavaScript executes in the client session. Each distinct payload attempt raises the severity by 2%.`,
+    });
+  }
+
+  /* --- 6. SQL injection probing (email update) ------------------------------ */
+  if (meta.sqli_attempt) {
+    flags.push({
+      kind: 'SQLI',
+      title: 'SQL Injection Probing: Payload in Email Update',
+      summary: `${ev.username} submitted SQL injection payloads via the email update ("${String(meta.payload || '').slice(0, 70)}"). The value is interpolated straight into the UPDATE statement${meta.sqli_error ? ` — database error captured: ${String(meta.sqli_error).slice(0, 90)}` : ''}. Each distinct payload attempt raises the severity by 2%.`,
+    });
   }
 
   /* --- 4. Session hijack: one session token used from multiple IPs --------- */

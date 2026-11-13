@@ -408,6 +408,8 @@
       const typeShort = a.alert_type === 'POSSIBLE_IDOR_ATTACK' ? 'IDOR'
         : a.alert_type === 'POSSIBLE_BUSINESS_LOGIC_ATTACK' ? 'BUSINESS LOGIC'
         : a.alert_type === 'SUSPICIOUS_SESSION_ANOMALY' ? 'SESSION HIJACK'
+        : a.alert_type === 'REFLECTED_XSS_ATTACK' ? 'XSS'
+        : a.alert_type === 'SQL_INJECTION_ATTACK' ? 'SQLi'
         : 'ENUMERATION';
       card.innerHTML = `
         <div class="alert-row">
@@ -494,12 +496,15 @@
   /* ---------- attack path (interactive layered graph with icons) ---------- */
   const LAYER_COLORS = {
     device: '#fb7185', session: '#c084fc', endpoint: '#2dd4bf',
-    query: '#34d399', data: '#fbbf24', impact: '#a5b4fc',
+    query: '#34d399', database: '#fbbf24', data: '#fbbf24',
+    reflection: '#a5b4fc', sink: '#fb923c', impact: '#a5b4fc',
   };
   const LAYER_TITLES = {
     device: 'Client device', session: 'Session', endpoint: 'API endpoint',
-    query: 'Correlated SQL', data: 'Database tables', impact: 'Impact',
+    query: 'Malformed / correlated SQL', database: 'Database', data: 'Database tables',
+    reflection: 'Reflected input', sink: 'Client DOM sink', impact: 'Impact',
   };
+  let pathZoom = 1;
 
   // Small stroke icons drawn per layer, centred at (cx, cy)
   function layerIcon(layer, cx, cy, color) {
@@ -513,8 +518,14 @@
         return `<g ${s}><circle cx="${cx}" cy="${cy}" r="8"/><path d="M${cx - 8} ${cy} h16 M${cx} ${cy - 8} c3 2.5 3 13.5 0 16 M${cx} ${cy - 8} c-3 2.5 -3 13.5 0 16"/></g>`;
       case 'query': // database
         return `<g ${s}><ellipse cx="${cx}" cy="${cy - 5}" rx="8" ry="3.2"/><path d="M${cx - 8} ${cy - 5} v10 c0 1.8 3.6 3.2 8 3.2 s8 -1.4 8 -3.2 v-10"/><path d="M${cx - 8} ${cy} c0 1.8 3.6 3.2 8 3.2 s8 -1.4 8 -3.2"/></g>`;
+      case 'database': // database with error mark
+        return `<g ${s}><ellipse cx="${cx}" cy="${cy - 5}" rx="8" ry="3.2"/><path d="M${cx - 8} ${cy - 5} v10 c0 1.8 3.6 3.2 8 3.2 s8 -1.4 8 -3.2 v-10"/><path d="M${cx + 5} ${cy + 3} l6 6 M${cx + 11} ${cy + 3} l-6 6"/></g>`;
       case 'data': // table
         return `<g ${s}><rect x="${cx - 8}" y="${cy - 7}" width="16" height="14" rx="1.5"/><path d="M${cx - 8} ${cy - 2.5} h16 M${cx - 2.5} ${cy - 7} v14 M${cx + 3} ${cy - 7} v14"/></g>`;
+      case 'reflection': // code brackets
+        return `<g ${s}><polyline points="${cx - 7},${cy - 6} ${cx - 11},${cy} ${cx - 7},${cy + 6}"/><polyline points="${cx + 7},${cy - 6} ${cx + 11},${cy} ${cx + 7},${cy + 6}"/><path d="M${cx - 1} ${cy + 5} l2 -10"/></g>`;
+      case 'sink': // bug
+        return `<g ${s}><rect x="${cx - 5}" y="${cy - 4}" width="10" height="9" rx="4.5"/><path d="M${cx - 5} ${cy} h-4 M${cx + 5} ${cy} h4 M${cx - 4} ${cy - 5} l-3 -3 M${cx + 4} ${cy - 5} l3 -3 M${cx - 4} ${cy + 6} l-3 3 M${cx + 4} ${cy + 6} l3 3"/></g>`;
       case 'impact': // alert triangle
         return `<g ${s}><path d="M${cx} ${cy - 8} l8 14 h-16 z"/><path d="M${cx} ${cy - 1} v3.5"/><circle cx="${cx}" cy="${cy + 4.2}" r="0.5"/></g>`;
       default:
@@ -610,6 +621,7 @@
     $('pathSub').textContent = `${a.alert_type} • ${a.severity} • trace ${String(a.evidence?.traceId || '').slice(0, 8)}`;
     const ap = a.attack_path || {};
     $('pathNodeDetail').classList.add('hidden');
+    pathZoom = 1;
     renderPathGraph(ap.nodes || [], ap.edges || []);
     const stepsEl = $('pathSteps');
     stepsEl.innerHTML = '';
@@ -628,6 +640,18 @@
     $('pathModal').classList.remove('hidden');
   }
 
+  // Adjustable zoom on the attack-path graph
+  function applyZoom() {
+    const svg = document.querySelector('#pathGraph svg');
+    if (svg) {
+      svg.style.transform = `scale(${pathZoom})`;
+      svg.style.transformOrigin = 'top left';
+    }
+    $('zoomLevel').textContent = `${Math.round(pathZoom * 100)}%`;
+  }
+  $('zoomIn').addEventListener('click', () => { pathZoom = Math.min(2.5, pathZoom + 0.25); applyZoom(); });
+  $('zoomOut').addEventListener('click', () => { pathZoom = Math.max(0.5, pathZoom - 0.25); applyZoom(); });
+  $('zoomReset').addEventListener('click', () => { pathZoom = 1; applyZoom(); });
   $('pathClose').addEventListener('click', () => $('pathModal').classList.add('hidden'));
   $('pathModal').addEventListener('click', (e) => { if (e.target === $('pathModal')) $('pathModal').classList.add('hidden'); });
 
