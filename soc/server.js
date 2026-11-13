@@ -19,6 +19,7 @@ import {
   stats, severityBreakdown, clearAll,
   listActions, getSettings, setSetting,
   latestRiskByActor, riskHistory, insertAction, setAlertResponse, validateOperator,
+  getOperatorByUsername, updateOperatorPhone,
 } from './db.js';
 import { evaluateEvent } from './correlate.js';
 import { updateRisk } from './risk.js';
@@ -140,10 +141,36 @@ function requireOperator(req, res, next) {
   const key = req.headers['x-api-key'];
   if ((token && operators.has(token)) || (key && key === API_KEY)) {
     req.operator = token && operators.get(token) ? operators.get(token).name : 'api-key';
+    req.operatorUsername = token && operators.get(token) ? operators.get(token).username : null;
     return next();
   }
   return res.status(401).json({ success: false, error: 'Unauthorized SOC session' });
 }
+
+// Operator profile (details popover): name/username/role are fixed, phone is editable.
+app.get('/api/operator/me', requireOperator, async (req, res) => {
+  const op = req.operatorUsername ? await getOperatorByUsername(req.operatorUsername) : null;
+  if (!op) return res.json({ success: true, operator: { username: 'api-key', name: req.operator, role: 'integration', phone: '' } });
+  res.json({ success: true, operator: op });
+});
+
+app.put('/api/operator/phone', requireOperator, async (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+    return res.status(400).json({ success: false, error: 'A valid phone number (min 6 chars) is required' });
+  }
+  const updated = await updateOperatorPhone(req.operatorUsername, phone.trim());
+  if (!updated) return res.status(404).json({ success: false, error: 'Operator not found in the register' });
+  insertAction({
+    kind: 'operator_profile_update',
+    targetValue: updated.username,
+    reason: `${updated.name} updated their contact number`,
+    source: 'system',
+    operator: updated.name,
+    alertId: null,
+  }).catch(() => {});
+  res.json({ success: true, operator: updated });
+});
 
 /* ==========================================================================
    Read APIs (operator console + integrations)

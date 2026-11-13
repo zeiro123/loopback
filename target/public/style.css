@@ -86,6 +86,28 @@ input:focus { border-color: var(--maroon); background: #fff; }
 .bank-name { display: block; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
 .bank-sub { display: block; font-size: 10.5px; opacity: .75; letter-spacing: .12em; text-transform: uppercase; }
 .header-user { display: flex; align-items: center; gap: 16px; }
+
+/* ---------- header profile button + popover ---------- */
+.profile-btn { display: flex; align-items: center; gap: 11px; background: transparent; border: 0; cursor: pointer; padding: 6px 10px; margin: -6px -10px; border-radius: 14px; color: inherit; text-align: left; }
+.profile-btn:hover { background: rgba(0,0,0,.05); }
+.profile-avatar { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; letter-spacing: .4px; color: #fdf3e7; background: linear-gradient(135deg, #7a1f2b, #a63a48); box-shadow: 0 0 0 2px rgba(122,31,43,.18); flex: none; }
+.profile-avatar.lg { width: 46px; height: 46px; font-size: 16px; }
+.profile-pop { position: fixed; top: 84px; right: 22px; width: 300px; background: #fffdf8; border: 1px solid rgba(122,31,43,.14); border-radius: 18px; padding: 18px; box-shadow: 0 20px 55px rgba(60,17,23,.22); z-index: 90; }
+.pop-head { display: flex; align-items: center; gap: 13px; margin-bottom: 13px; }
+.pop-head h4 { margin: 0; font-size: 15px; }
+.pop-rows { margin: 0 0 14px; display: flex; flex-direction: column; gap: 7px; }
+.pop-rows > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.pop-rows dt { color: #8a7a6d; flex: none; }
+.pop-rows dd { margin: 0; text-align: right; word-break: break-word; }
+.profile-pop .btn.secondary { width: 100%; }
+
+/* ---------- styled scrollbars (every scroll area) ---------- */
+* { scrollbar-width: thin; scrollbar-color: rgba(122,31,43,.35) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(122,31,43,.38), rgba(122,31,43,.55)); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(122,31,43,.75); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
 .user-meta { text-align: right; }
 .user-label { display: block; font-size: 11px; opacity: .75; }
 .user-name { display: block; font-size: 14.5px; font-weight: 700; }

@@ -97,8 +97,10 @@ export async function ensureSchema() {
       username TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'analyst'
+      role TEXT NOT NULL DEFAULT 'analyst',
+      phone TEXT DEFAULT ''
     )`,
+    `ALTER TABLE soc_operators ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''`,
   ];
   for (let attempt = 1; attempt <= 25; attempt++) {
     try {
@@ -128,25 +130,42 @@ async function seedSettings() {
   }
   // Five SOC analysts + the lead operator — actions are attributed per analyst
   const operators = [
-    ['admin', 'Lead Analyst', 'admin', 'admin'],
-    ['nyasha', 'Nyasha M.', 'nyasha2026', 'analyst'],
-    ['chipo', 'Chipo M.', 'chipo2026', 'analyst'],
-    ['farai', 'Farai K.', 'farai2026', 'analyst'],
-    ['rutendo', 'Rutendo N.', 'rutendo2026', 'analyst'],
-    ['tapiwa', 'Tapiwa D.', 'tapiwa2026', 'analyst'],
+    ['admin', 'Lead Analyst', 'admin', 'admin', '+263 771 900 001'],
+    ['nyasha', 'Nyasha M.', 'nyasha2026', 'analyst', '+263 771 900 002'],
+    ['chipo', 'Chipo M.', 'chipo2026', 'analyst', '+263 771 900 003'],
+    ['farai', 'Farai K.', 'farai2026', 'analyst', '+263 771 900 004'],
+    ['rutendo', 'Rutendo N.', 'rutendo2026', 'analyst', '+263 771 900 005'],
+    ['tapiwa', 'Tapiwa D.', 'tapiwa2026', 'analyst', '+263 771 900 006'],
   ];
-  for (const [username, name, password, role] of operators) {
+  for (const [username, name, password, role, phone] of operators) {
     await pool.query(
-      'INSERT INTO soc_operators (username, name, password, role) VALUES ($1,$2,$3,$4) ON CONFLICT (username) DO NOTHING',
-      [username, name, password, role]
+      `INSERT INTO soc_operators (username, name, password, role, phone) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (username) DO NOTHING`,
+      [username, name, password, role, phone]
     );
   }
 }
 
 export async function validateOperator(username, password) {
   const { rows } = await pool.query(
-    'SELECT username, name, role FROM soc_operators WHERE username = $1 AND password = $2 LIMIT 1',
+    'SELECT username, name, role, phone FROM soc_operators WHERE username = $1 AND password = $2 LIMIT 1',
     [String(username || ''), String(password || '')]
+  );
+  return rows[0] || null;
+}
+
+export async function getOperatorByUsername(username) {
+  const { rows } = await pool.query(
+    'SELECT username, name, role, phone FROM soc_operators WHERE username = $1 LIMIT 1',
+    [String(username || '')]
+  );
+  return rows[0] || null;
+}
+
+export async function updateOperatorPhone(username, phone) {
+  const { rows } = await pool.query(
+    'UPDATE soc_operators SET phone = $2 WHERE username = $1 RETURNING username, name, role, phone',
+    [String(username || ''), String(phone || '')]
   );
   return rows[0] || null;
 }

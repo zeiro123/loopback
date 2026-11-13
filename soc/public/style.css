@@ -83,6 +83,32 @@ body { font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif; backgroun
 .nav-btn.active { color: var(--teal); background: rgba(45,212,191,.1); }
 .nav-btn.active svg { opacity: 1; }
 .side-foot { border-top: 1px solid var(--line); padding: 15px 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; }
+
+/* ---------- profile button + popover (operator identity) ---------- */
+.profile-btn { display: flex; align-items: center; gap: 10px; background: transparent; border: 0; cursor: pointer; padding: 6px 8px; margin: -6px -8px; border-radius: 12px; color: inherit; text-align: left; }
+.profile-btn:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.profile-avatar { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; letter-spacing: .4px; color: #05221d; background: linear-gradient(135deg, #2dd4bf, #34d399); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); flex: none; }
+.profile-avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+.profile-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.profile-role { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted-fg); }
+.profile-name { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.profile-pop { position: absolute; bottom: 62px; left: 14px; width: 264px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.45); z-index: 90; }
+.pop-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.pop-head h4 { margin: 0; font-size: 14px; }
+.pop-rows { margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.pop-rows > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+.pop-rows dt { color: var(--muted-fg); flex: none; }
+.pop-rows dd { margin: 0; text-align: right; word-break: break-word; }
+.pop-edit .mini-label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted-fg); margin-bottom: 6px; }
+.pop-edit .small-note { font-size: 11px; margin: 8px 0 0; }
+
+/* ---------- styled scrollbars (every scroll area) ---------- */
+* { scrollbar-width: thin; scrollbar-color: rgba(45,212,191,.30) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(45,212,191,.35), rgba(52,211,153,.55)); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(45,212,191,.7); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
 .content { flex: 1; padding: 28px 32px 90px; max-width: 1340px; }
 .panel { display: none; }
 .panel.active { display: block; animation: fade .22s ease; }

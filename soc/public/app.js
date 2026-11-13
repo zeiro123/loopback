@@ -72,6 +72,8 @@
       await new Promise((r) => setTimeout(r, 700));
       state.token = data.token;
       sessionStorage.setItem(TOKEN_KEY, data.token);
+      state.operator = { username: data.username || 'operator', name: data.name || 'Operator', role: data.role || 'analyst' };
+      renderOpIdentity(state.operator);
       enterConsole();
     } catch (err) {
       const el = $('gateError');
@@ -84,14 +86,73 @@
   });
 
   function logout() {
+    if (!window.confirm('Exit the SOC console?\n\nYour operator session will be closed and live traffic polling stops.')) return;
     state.token = null;
+    state.operator = null;
     sessionStorage.removeItem(TOKEN_KEY);
     if (state.pollTimer) clearInterval(state.pollTimer);
+    $('opProfilePop').classList.add('hidden');
     $('console').classList.add('hidden');
     $('gate').classList.remove('hidden');
   }
 
   $('logoutBtn').addEventListener('click', logout);
+
+  /* ---------- operator identity + profile popover ---------- */
+  function initialsOf(name) {
+    return String(name || '–').trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '–';
+  }
+  function renderOpIdentity(op) {
+    if (!op) return;
+    $('opInitials').textContent = initialsOf(op.name);
+    $('opName').textContent = op.name;
+    $('opRole').textContent = op.role;
+  }
+  async function openOpProfile() {
+    const pop = $('opProfilePop');
+    if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }
+    pop.classList.remove('hidden');
+    try {
+      const { ok, data } = await api('/api/operator/me');
+      const op = ok && data.success ? data.operator : null;
+      if (!op) return;
+      $('opPopInitials').textContent = initialsOf(op.name);
+      $('opPopName').textContent = op.name;
+      $('opPopUsername').textContent = `@${op.username}`;
+      $('opPopRole').textContent = op.role;
+      $('opPopPhone').textContent = op.phone || 'not set';
+      $('opPhoneInput').value = op.phone || '';
+    } catch { /* popover stays with placeholders */ }
+  }
+  $('opProfileBtn').addEventListener('click', openOpProfile);
+  document.addEventListener('click', (e) => {
+    const pop = $('opProfilePop');
+    if (!pop.classList.contains('hidden') && !pop.contains(e.target) && e.target !== $('opProfileBtn') && !$('opProfileBtn').contains(e.target)) {
+      pop.classList.add('hidden');
+    }
+  });
+  $('opPhoneSave').addEventListener('click', async () => {
+    const btn = $('opPhoneSave');
+    const phone = $('opPhoneInput').value.trim();
+    if (!phone) return;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const { ok, data } = await api('/api/operator/phone', { method: 'PUT', body: JSON.stringify({ phone }) });
+      if (ok && data.success) {
+        $('opPopPhone').textContent = data.operator.phone;
+        $('opPhoneInput').value = data.operator.phone;
+        btn.textContent = 'Saved ✓';
+        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1400);
+      } else {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1400);
+      }
+    } catch {
+      btn.textContent = 'Failed';
+      setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; }, 1400);
+    }
+  });
 
   function enterConsole() {
     $('gate').classList.add('hidden');
@@ -714,7 +775,8 @@
     $('setRiskVal').textContent = Number(s.risk_threshold ?? 75);
     state.apiKey = res.data.apiKey;
     $('apiKeyVal').textContent = state.apiKey || '—';
-    $('opName').textContent = `operator: ${res.data.operator || 'admin'}`;
+    if (!state.operator) state.operator = { username: 'operator', name: res.data.operator || 'Operator', role: 'analyst' };
+    renderOpIdentity(state.operator);
   }
 
   $('setRiskThreshold').addEventListener('input', () => { $('setRiskVal').textContent = $('setRiskThreshold').value; });

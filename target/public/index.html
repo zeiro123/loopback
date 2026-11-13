@@ -71,12 +71,32 @@
           </div>
         </div>
         <div class="header-user">
-          <div class="user-meta">
-            <span class="user-label">Account holder</span>
-            <span class="user-name" id="headerName">—</span>
-          </div>
+          <button class="profile-btn" id="profileBtn" type="button" title="Account holder details">
+            <span class="profile-avatar" id="profileInitials">–</span>
+            <span class="user-meta">
+              <span class="user-label">Account holder</span>
+              <span class="user-name" id="headerName">—</span>
+            </span>
+          </button>
           <button class="btn ghost" id="logoutBtn" type="button">Sign Out</button>
         </div>
+      </div>
+      <div id="profilePop" class="profile-pop hidden">
+        <div class="pop-head">
+          <span class="profile-avatar lg" id="popInitials">–</span>
+          <div>
+            <h4 id="popName">—</h4>
+            <span class="mono muted" id="popUsername">—</span>
+          </div>
+        </div>
+        <dl class="pop-rows">
+          <div><dt>Client ID</dt><dd class="mono" id="popId">—</dd></div>
+          <div><dt>Email</dt><dd id="popEmail">—</dd></div>
+          <div><dt>Phone</dt><dd class="mono" id="popPhone">—</dd></div>
+          <div><dt>Occupation</dt><dd id="popOccupation">—</dd></div>
+          <div><dt>Address</dt><dd id="popAddress">—</dd></div>
+        </dl>
+        <button class="btn secondary" id="popEdit" type="button">Manage details</button>
       </div>
       <nav class="bank-tabs">
         <button class="bank-tab active" data-tab="dashboard" type="button">Dashboard</button>

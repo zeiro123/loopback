@@ -68,8 +68,35 @@
           Terms</button>
       </nav>
       <div class="side-foot">
-        <span class="mono muted" id="opName">operator: —</span>
+        <button class="profile-btn" id="opProfileBtn" type="button" title="Operator profile">
+          <span class="profile-avatar" id="opInitials">–</span>
+          <span class="profile-meta">
+            <span class="profile-role mono" id="opRole">operator</span>
+            <span class="profile-name" id="opName">—</span>
+          </span>
+        </button>
         <button class="btn danger small" id="logoutBtn" type="button">Exit</button>
+      </div>
+      <div id="opProfilePop" class="profile-pop hidden">
+        <div class="pop-head">
+          <span class="profile-avatar lg" id="opPopInitials">–</span>
+          <div>
+            <h4 id="opPopName">—</h4>
+            <span class="mono muted" id="opPopUsername">—</span>
+          </div>
+        </div>
+        <dl class="pop-rows">
+          <div><dt>Role</dt><dd id="opPopRole">—</dd></div>
+          <div><dt>Contact</dt><dd class="mono" id="opPopPhone">—</dd></div>
+        </dl>
+        <div class="pop-edit">
+          <label class="mini-label">Update contact number</label>
+          <div class="lookup">
+            <input id="opPhoneInput" type="text" placeholder="+263 …" />
+            <button class="btn secondary" id="opPhoneSave" type="button">Save</button>
+          </div>
+          <p class="muted small-note">Name, username and role are fixed by the SOC register.</p>
+        </div>
       </div>
     </aside>
 

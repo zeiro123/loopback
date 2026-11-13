@@ -137,8 +137,42 @@
   });
 
   $('logoutBtn').addEventListener('click', async () => {
+    if (!window.confirm('Sign out of Apex Trust?\n\nYour banking session will be closed.')) return;
     try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
     clearSession();
+  });
+
+  /* ---------- header profile popover ---------- */
+  function initialsOf(name) {
+    return String(name || '–').trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '–';
+  }
+  function renderHeaderProfile() {
+    const u = state.user;
+    if (!u) return;
+    $('profileInitials').textContent = initialsOf(u.name);
+    $('popInitials').textContent = initialsOf(u.name);
+    $('popName').textContent = u.name;
+    $('popUsername').textContent = `@${u.username}`;
+    $('popId').textContent = `#${u.id}`;
+    $('popEmail').textContent = u.email || '—';
+    $('popPhone').textContent = u.phone || 'not set';
+    $('popOccupation').textContent = u.occupation || '—';
+    $('popAddress').textContent = u.address || '—';
+  }
+  $('profileBtn').addEventListener('click', () => {
+    const pop = $('profilePop');
+    pop.classList.toggle('hidden');
+    if (!pop.classList.contains('hidden')) renderHeaderProfile();
+  });
+  document.addEventListener('click', (e) => {
+    const pop = $('profilePop');
+    if (!pop.classList.contains('hidden') && !pop.contains(e.target) && !$('profileBtn').contains(e.target)) {
+      pop.classList.add('hidden');
+    }
+  });
+  $('popEdit').addEventListener('click', () => {
+    $('profilePop').classList.add('hidden');
+    document.querySelector('.bank-tab[data-tab="profile"]')?.click();
   });
 
   /* ---------- app shell ---------- */
@@ -147,6 +181,7 @@
     $('appView').classList.remove('hidden');
     $('chatWidget').classList.remove('hidden');
     $('headerName').textContent = state.user.name;
+    renderHeaderProfile();
     $('profileName').textContent = state.user.name;
     $('profileUsername').textContent = state.user.username;
     $('profileId').textContent = `#${state.user.id}`;
@@ -605,6 +640,7 @@
         state.user = { ...state.user, ...data.user };
         $('profilePhone').textContent = data.user.phone || '—';
         $('profileOccupation').textContent = data.user.occupation || '—';
+        renderHeaderProfile();
       }
       toast(data.message);
     } catch (err) {
