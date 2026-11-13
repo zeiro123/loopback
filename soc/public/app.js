@@ -372,8 +372,8 @@
   // Severity as a percentage 0–100, coloured on a continuous green → red scale
   function sevPctOf(a) {
     if (a.severity_pct != null) return a.severity_pct;
-    const base = { INFO: 24, MEDIUM: 48, HIGH: 74, CRITICAL: 90 }[a.severity] ?? 50;
-    return Math.min(99, base + (a.is_cross_functional ? 4 : 0) + Math.min(5, ((a.attempts || 1) - 1) * 2));
+    const base = { INFO: 10, MEDIUM: 35, HIGH: 65, CRITICAL: 88 }[a.severity] ?? 40;
+    return Math.min(99, base + Math.min(25, ((a.attempts || 1) - 1) * 9) + (a.is_cross_functional ? 6 : 0));
   }
   function sevColor(pct) {
     const hue = Math.round(120 - (pct / 100) * 120); // 120 = green, 60 = orange, 0 = red
@@ -402,7 +402,13 @@
         : 'ENUMERATION';
       card.innerHTML = `
         <div class="alert-row">
-          <span class="sev-disc" style="border-color:${color};color:${color}"><strong>${pct}</strong><em>%</em></span>
+          <span class="sev-ring" title="${pct}% severity">
+            <svg viewBox="0 0 56 56">
+              <circle class="ring-bg" cx="28" cy="28" r="24"/>
+              <circle class="ring-fg" cx="28" cy="28" r="24" stroke="${color}" stroke-dasharray="${(2 * Math.PI * 24).toFixed(1)}" stroke-dashoffset="${(2 * Math.PI * 24 * (1 - pct / 100)).toFixed(1)}"/>
+              <text x="28" y="33" text-anchor="middle" fill="${color}">${pct}<tspan font-size="8">%</tspan></text>
+            </svg>
+          </span>
           <div class="alert-row-main">
             <div class="alert-row-title">${esc(a.title)}</div>
             <div class="alert-row-sub">

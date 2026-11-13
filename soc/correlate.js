@@ -126,8 +126,21 @@ async function buildAttackPath(ev, kind) {
 }
 
 async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
-  const priorCount = await countRecentAlerts(ev.actor_id, kind);
-  const classes = new Set(windowEvs.map((w) => endpointClass(w.endpoint)));
+  const alertType = kind === 'IDOR' ? 'POSSIBLE_IDOR_ATTACK'
+    : kind === 'BIZLOGIC' ? 'POSSIBLE_BUSINESS_LOGIC_ATTACK'
+    : kind === 'HIJACK' ? 'SUSPICIOUS_SESSION_ANOMALY'
+    : 'RESOURCE_ENUMERATION_ATTACK';
+  // Count the actor's prior alerts of the SAME TYPE — this is what makes the
+  // severity percentage escalate as their actions repeat.
+  const priorCount = await countRecentAlerts(ev.actor_id, alertType);
+  // Cross-functional breadth means flagged activity spanning distinct endpoint
+  // CLASSES — logging in/out is part of every legitimate session and must not
+  // inflate it, otherwise a first attempt would read as HIGH.
+  const classes = new Set(
+    windowEvs
+      .map((w) => endpointClass(w.endpoint))
+      .filter((c) => !c.startsWith('api/auth'))
+  );
   const isCross = classes.size > 1;
   const attempts = priorCount + 1;
 
@@ -142,10 +155,14 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     severity = isCross || attempts >= 4 ? 'CRITICAL' : 'HIGH';
   }
 
-  // Severity as a percentage (0–100): base by level, boosted by repetition and
-  // cross-functional breadth — the UI renders this on a continuous green→red scale.
-  const basePct = { INFO: 24, MEDIUM: 48, HIGH: 74, CRITICAL: 90 }[severity] ?? 50;
-  const severityPct = Math.min(99, basePct + (isCross ? 4 : 0) + Math.min(5, (attempts - 1) * 2));
+  // Severity as a percentage (0–100), escalating with the actor's alert count:
+  // a single cross-object access is LOW (~10%) and the score climbs as their
+  // actions become more suspicious. The UI renders it as a closing ring on a
+  // continuous green → red scale.
+  const levelBase = { INFO: 10, MEDIUM: 35, HIGH: 65, CRITICAL: 88 }[severity] ?? 40;
+  const attemptBoost = Math.min(25, (attempts - 1) * 9); // every prior alert escalates the score
+  const crossBoost = isCross ? 6 : 0;
+  const severityPct = Math.min(99, levelBase + attemptBoost + crossBoost);
 
   const affected = [...new Set(windowEvs.map((w) => w.endpoint.split('?')[0]))].slice(-6);
   const attackPath = await buildAttackPath(ev, kind);
@@ -155,10 +172,7 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     ts: new Date().toISOString(),
     actorId: ev.actor_id,
     username: ev.username,
-    alertType: kind === 'IDOR' ? 'POSSIBLE_IDOR_ATTACK'
-      : kind === 'BIZLOGIC' ? 'POSSIBLE_BUSINESS_LOGIC_ATTACK'
-      : kind === 'HIJACK' ? 'SUSPICIOUS_SESSION_ANOMALY'
-      : 'RESOURCE_ENUMERATION_ATTACK',
+    alertType,
     severity,
     severityPct,
     title,

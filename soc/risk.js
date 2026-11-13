@@ -53,7 +53,8 @@ export function extractFeatures(windowEvents, dbRowsByTrace = 0) {
     if (ro.userId != null && e.actor_id != null && Number(ro.userId) !== Number(e.actor_id)) idor++;
     if (meta.amount != null && String(e.endpoint).includes('transfers') && Number(meta.amount) <= 0) bizlogic++;
     if (meta.amount != null && String(e.endpoint).includes('transfers') && meta.balanceBefore != null && Number(meta.amount) > Number(meta.balanceBefore)) bizlogic++;
-    classes.add(String(e.endpoint).split('/').slice(1, 3).join('/'));
+    const cls = String(e.endpoint).split('/').slice(1, 3).join('/');
+    if (!cls.startsWith('api/auth')) classes.add(cls);
     if (e.status_code >= 400) errors++;
   }
 

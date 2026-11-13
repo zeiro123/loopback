@@ -202,13 +202,11 @@ body { font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif; backgroun
 .alerts-list { display: flex; flex-direction: column; gap: 12px; }
 .alert-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px 18px; }
 .alert-row { display: flex; align-items: center; gap: 16px; }
-.sev-disc {
-  width: 56px; height: 56px; border-radius: 50%; border: 2px solid; background: var(--bg);
-  display: flex; align-items: baseline; justify-content: center; align-items: center; gap: 1px; flex-shrink: 0;
-  font-family: 'Cascadia Mono', Consolas, monospace;
-}
-.sev-disc strong { font-size: 15px; font-weight: 800; }
-.sev-disc em { font-size: 9px; font-style: normal; opacity: .8; }
+.sev-ring { width: 56px; height: 56px; flex-shrink: 0; }
+.sev-ring svg { width: 56px; height: 56px; display: block; }
+.sev-ring .ring-bg { fill: var(--bg); stroke: var(--panel-2); stroke-width: 5; }
+.sev-ring .ring-fg { fill: none; stroke-width: 5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transition: stroke-dashoffset .7s ease; }
+.sev-ring text { font-size: 14px; font-weight: 800; font-family: 'Cascadia Mono', Consolas, monospace; }
 .alert-row-main { flex: 1; min-width: 0; }
 .alert-row-title { font-size: 15px; font-weight: 800; margin-bottom: 5px; }
 .alert-row-sub { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
