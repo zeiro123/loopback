@@ -73,8 +73,10 @@ export async function ensureSchema() {
       reason TEXT,
       source TEXT NOT NULL DEFAULT 'manual',
       operator TEXT,
-      alert_id TEXT
+      alert_id TEXT,
+      expires_at TIMESTAMPTZ
     )`,
+    `ALTER TABLE soc_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `CREATE TABLE IF NOT EXISTS user_risk (
       id BIGSERIAL PRIMARY KEY,
       actor_id INTEGER NOT NULL,
@@ -273,15 +275,24 @@ export async function setAlertResponse(alertId, response) {
   await pool.query('UPDATE alerts SET response = $2 WHERE id = $1', [alertId, JSON.stringify(response)]);
 }
 
+// Read-modify-write: patch one response field without clobbering the others.
+export async function mergeAlertResponse(alertId, patch) {
+  const { rows } = await pool.query('SELECT response FROM alerts WHERE id = $1', [alertId]);
+  const current = rows[0]?.response ? (typeof rows[0].response === 'string' ? JSON.parse(rows[0].response) : rows[0].response) : {};
+  const merged = { ...current, ...patch };
+  await setAlertResponse(alertId, merged);
+  return merged;
+}
+
 /* ==========================================================================
    Response actions (manual + autonomous)
    ========================================================================== */
 
-export async function insertAction({ kind, targetValue, reason, source, operator, alertId }) {
+export async function insertAction({ kind, targetValue, reason, source, operator, alertId, expiresAt }) {
   const { rows } = await pool.query(
-    `INSERT INTO soc_actions (kind, target_value, reason, source, operator, alert_id)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, ts`,
-    [kind, String(targetValue), reason ?? null, source || 'manual', operator ?? null, alertId ?? null]
+    `INSERT INTO soc_actions (kind, target_value, reason, source, operator, alert_id, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, ts`,
+    [kind, String(targetValue), reason ?? null, source || 'manual', operator ?? null, alertId ?? null, expiresAt ?? null]
   );
   return rows[0];
 }

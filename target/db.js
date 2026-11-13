@@ -140,6 +140,8 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS soc_controls_kind_idx ON soc_controls (kind, value, active)`,
+    // Temporary bans: controls may carry an expiry (NULL = permanent)
+    `ALTER TABLE soc_controls ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
   ];
   for (let attempt = 1; attempt <= 25; attempt++) {
     try {
@@ -561,10 +563,10 @@ export async function listChat(convoId) {
    SOC control plane
    ========================================================================== */
 
-export async function applyControl({ kind, value, reason, source = 'manual' }) {
+export async function applyControl({ kind, value, reason, source = 'manual', expiresAt = null }) {
   const { rows } = await tq(
-    'INSERT INTO soc_controls (kind, value, reason, source) VALUES ($1,$2,$3,$4) RETURNING *',
-    [String(kind), String(value), reason ?? null, source]
+    'INSERT INTO soc_controls (kind, value, reason, source, expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+    [String(kind), String(value), reason ?? null, source, expiresAt]
   );
   if (kind === 'block_user') {
     // Kill every live session of the blocked user immediately.
@@ -585,10 +587,25 @@ export async function deactivateControl(kind, value) {
 
 export async function isUserBlocked(userId) {
   const { rows } = await tq(
-    "SELECT 1 FROM soc_controls WHERE kind = 'block_user' AND value = $1 AND active = true LIMIT 1",
+    `SELECT 1 FROM soc_controls
+     WHERE kind = 'block_user' AND value = $1 AND active = true
+       AND (expires_at IS NULL OR expires_at > NOW())
+     LIMIT 1`,
     [String(userId)]
   );
   return rows.length > 0;
+}
+
+// Active ban details for the login message (reason + remaining time).
+export async function getActiveBan(userId) {
+  const { rows } = await tq(
+    `SELECT reason, source, created_at, expires_at FROM soc_controls
+     WHERE kind = 'block_user' AND value = $1 AND active = true
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at DESC LIMIT 1`,
+    [String(userId)]
+  );
+  return rows[0] || null;
 }
 
 export async function isSessionRevoked(token) {
@@ -601,6 +618,8 @@ export async function isSessionRevoked(token) {
 }
 
 export async function activeControls() {
+  // Sweep expired temporary bans, then return everything still enforced.
+  await tq("UPDATE soc_controls SET active = false WHERE active = true AND expires_at IS NOT NULL AND expires_at <= NOW()");
   const { rows } = await tq('SELECT * FROM soc_controls WHERE active = true ORDER BY created_at DESC LIMIT 200');
   return rows;
 }

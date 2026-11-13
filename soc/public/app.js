@@ -173,6 +173,7 @@
       const which = tab.dataset.tab;
       if (which === 'actions') loadActions();
       if (which === 'users') loadUsers();
+      if (which === 'owasp') renderOwasp();
     });
   });
 
@@ -197,25 +198,43 @@
   }
 
   /* ---------- overview ---------- */
+  // Animate stat numbers from their current value to the new one (retouch)
+  function countUp(el, target) {
+    const to = Number(target) || 0;
+    const from = Number(el.dataset.v ?? '0') || 0;
+    el.dataset.v = String(to);
+    if (from === to) { el.textContent = to; return; }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = to; return; }
+    const t0 = performance.now();
+    const dur = 550;
+    function tick(t) {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   function renderOverview({ stats: s, severityBreakdown: sev }) {
     if (!s) return;
-    $('stApi').textContent = s.api_events ?? 0;
-    $('stDb').textContent = s.db_events ?? 0;
-    $('stAlerts').textContent = s.alerts ?? 0;
-    $('stCritical').textContent = s.critical ?? 0;
-    $('stActors').textContent = s.actors ?? 0;
-    $('stBlocked').textContent = s.blocked_users ?? 0;
-    $('stAuto').textContent = s.autonomous_actions ?? 0;
-    $('stRisk').textContent = s.avg_risk ?? 0;
+    countUp($('stApi'), s.api_events ?? 0);
+    countUp($('stDb'), s.db_events ?? 0);
+    countUp($('stAlerts'), s.alerts ?? 0);
+    countUp($('stCritical'), s.critical ?? 0);
+    countUp($('stActors'), s.actors ?? 0);
+    countUp($('stBlocked'), s.blocked_users ?? 0);
+    countUp($('stAuto'), s.autonomous_actions ?? 0);
+    countUp($('stRisk'), s.avg_risk ?? 0);
     const pill = $('alertCount');
     pill.textContent = s.alerts ?? 0;
     pill.classList.toggle('hidden', !(s.alerts > 0));
 
     const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'INFO'];
     const maxN = Math.max(1, ...(sev || []).map((x) => x.n));
-    $('sevBars').innerHTML = order.map((o) => {
+    $('sevBars').innerHTML = order.map((o, i) => {
       const n = sev?.find((x) => x.severity === o)?.n ?? 0;
-      return `<div class="sev-bar sev-${o}"><span class="slabel">${o}</span><span class="sbar"><span class="sfill" style="width:${Math.round((n / maxN) * 100)}%"></span></span><span class="snum">${n}</span></div>`;
+      return `<div class="sev-bar sev-${o}" style="animation-delay:${i * 70}ms"><span class="slabel">${o}</span><span class="sbar"><span class="sfill" style="width:${Math.round((n / maxN) * 100)}%"></span></span><span class="snum">${n}</span></div>`;
     }).join('');
 
     const top = [...state.users].sort((a, b) => (b.risk || 0) - (a.risk || 0)).slice(0, 6);
@@ -463,8 +482,9 @@
       const eps = (a.affected_endpoints || []).length;
       const resp = a.response || {};
       const respBits = [];
-      if (resp.blocked) respBits.push('USER BLOCKED');
+      if (resp.blocked) respBits.push(resp.suspendedUntil && !resp.permanent ? `BANNED · ends ${timeOf(resp.suspendedUntil, true)}` : 'PERMANENT BAN');
       if (resp.sessionRevoked) respBits.push('SESSION REVOKED');
+      if (resp.escalated) respBits.push('ESCALATED');
       if (resp.dismissed) respBits.push('DISMISSED');
       const typeShort = a.alert_type === 'POSSIBLE_IDOR_ATTACK' ? 'IDOR'
         : a.alert_type === 'POSSIBLE_BUSINESS_LOGIC_ATTACK' ? 'BUSINESS LOGIC'
@@ -507,8 +527,19 @@
           <div class="alert-actions">
             <button class="btn brain" data-act="path" type="button">Attack Path</button>
             <button class="btn ghost" data-act="evidence" type="button">Evidence</button>
-            <button class="btn danger" data-act="block" type="button">Block User</button>
+            <span class="ban-group">
+              <select class="ban-select" data-act="ban-duration" title="Ban duration">
+                <option value="">Permanent</option>
+                <option value="900000">15 min</option>
+                <option value="3600000">1 hour</option>
+                <option value="21600000">6 hours</option>
+                <option value="86400000">24 hours</option>
+                <option value="259200000">3 days</option>
+              </select>
+              <button class="btn danger" data-act="block" type="button">Ban User</button>
+            </span>
             <button class="btn warn" data-act="revoke" type="button">Revoke Session</button>
+            <button class="btn escalate" data-act="escalate" type="button">Escalate</button>
             <button class="btn ghost" data-act="dismiss" type="button">Dismiss</button>
           </div>
         </div>`;
@@ -526,26 +557,31 @@
       });
       card.querySelector('[data-act="path"]').addEventListener('click', () => openPath(a));
       card.querySelector('[data-act="evidence"]').addEventListener('click', () => openEvidence(a));
-      card.querySelector('[data-act="block"]').addEventListener('click', () =>
-        applyResponse('block_user', a.actor_id ?? a.evidence?.actorId, `Blocked for ${a.alert_type} (${a.severity}) — ${a.title}`, a.id));
+      card.querySelector('[data-act="block"]').addEventListener('click', () => {
+        const ms = card.querySelector('[data-act="ban-duration"]').value;
+        const label = ms ? (Number(ms) >= 86400000 ? `${Number(ms) / 86400000} day(s)` : `${Number(ms) / 3600000} hour(s)`) : 'permanently';
+        applyResponse('block_user', a.actor_id ?? a.evidence?.actorId, `Banned ${label} for ${a.alert_type} (${a.severity}) — ${a.title}`, a.id, ms ? Number(ms) : null);
+      });
       card.querySelector('[data-act="revoke"]').addEventListener('click', () => {
         const token = a.evidence?.sessionToken || a.evidence?.session_token;
         if (!token) { toast('No session token in this alert\'s evidence.'); return; }
         applyResponse('revoke_session', token, `Session revoked for ${a.alert_type} — ${a.title}`, a.id);
       });
+      card.querySelector('[data-act="escalate"]').addEventListener('click', () =>
+        applyResponse('escalate_alert', a.id, `Escalated for investigation — ${a.alert_type} (${a.severity})`, a.id));
       card.querySelector('[data-act="dismiss"]').addEventListener('click', () =>
         applyResponse('dismiss_alert', a.id, `Dismissed ${a.alert_type}`, a.id));
       list.appendChild(card);
     }
   }
 
-  async function applyResponse(kind, value, reason, alertId) {
+  async function applyResponse(kind, value, reason, alertId, durationMs = null) {
     const res = await api('/api/actions', {
       method: 'POST',
-      body: JSON.stringify({ kind, value: String(value), reason, alertId }),
+      body: JSON.stringify({ kind, value: String(value), reason, alertId, ...(durationMs ? { durationMs } : {}) }),
     });
     if (res.ok && res.data.success) {
-      toast(`${kind} applied${res.data.push && res.data.push.ok === false ? ' (push to target failed — target offline?)' : ''}.`);
+      toast(`${kind.replace('_alert', '').replace('_', ' ')} applied${res.data.push && res.data.push.ok === false ? ' (push to target failed — target offline?)' : ''}.`);
       const alertsRes = await api('/api/alerts');
       if (alertsRes.ok) { state.alerts = alertsRes.data.alerts || []; renderAlerts(); }
       loadRecentActions();
@@ -740,25 +776,54 @@
   });
 
   async function loadActions() {
-    const res = await api('/api/actions?limit=200');
+    const [res, bansRes] = await Promise.all([api('/api/actions?limit=200'), api('/api/bans')]);
     if (!res.ok) return;
     const actions = (res.data.actions || []).filter((a) => !state.srcFilter || a.source === state.srcFilter);
     const body = $('actionsBody');
     body.innerHTML = '';
     if (!actions.length) {
       body.innerHTML = '<tr><td colspan="6" class="muted mono" style="padding:16px">[NO RESPONSE ACTIONS YET]</td></tr>';
-      return;
     }
     for (const a of actions) {
+      const expired = a.expires_at && new Date(a.expires_at) <= new Date();
+      const banBadge = a.kind === 'block_user'
+        ? (a.expires_at && !expired ? `<span class="ban-badge temp">TEMP · ends ${timeOf(a.expires_at, true)}</span>` : a.expires_at ? '<span class="ban-badge done">EXPIRED</span>' : '<span class="ban-badge perm">PERMANENT</span>')
+        : a.kind === 'escalate_alert' ? '<span class="ban-badge esc">ESCALATED</span>'
+        : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="mono">${timeOf(a.ts, true)}</td>
-        <td><strong>${esc(a.kind)}</strong></td>
+        <td><strong>${esc(a.kind)}</strong> ${banBadge}</td>
         <td class="mono">${esc(String(a.target_value).slice(0, 26))}</td>
         <td><span class="s src-${String(a.source).toUpperCase()}">${esc(a.source)}</span></td>
         <td class="mono">${esc(a.operator || '—')}</td>
         <td class="muted" style="max-width:340px">${esc(String(a.reason || '').slice(0, 140))}</td>`;
       body.appendChild(tr);
+    }
+    // Active bans card with live countdowns
+    const bansCard = $('activeBansCard');
+    const bansBody = $('activeBansBody');
+    if (!bansCard || !bansBody) return;
+    const bans = bansRes.ok ? (bansRes.data.bans || []) : [];
+    bansCard.classList.toggle('hidden', bans.length === 0);
+    bansBody.innerHTML = '';
+    for (const b of bans) {
+      const el = document.createElement('div');
+      el.className = 'ban-item';
+      const permanent = !b.expires_at;
+      el.innerHTML = `
+        <div class="ban-info">
+          <strong class="mono">User ${esc(String(b.value))}</strong>
+          <span class="ban-reason muted">${esc(String(b.reason || '').slice(0, 90))}</span>
+        </div>
+        <div class="ban-side">
+          <span class="ban-badge ${permanent ? 'perm' : 'temp'}">${permanent ? 'PERMANENT' : `ends ${timeOf(b.expires_at, true)}`}</span>
+          <button class="btn ghost small" data-unban="${esc(String(b.value))}" type="button">Unban</button>
+        </div>`;
+      el.querySelector('[data-unban]').addEventListener('click', () => {
+        applyResponse('unblock_user', b.value, `Unbanned user ${b.value} by operator`, null);
+      });
+      bansBody.appendChild(el);
     }
   }
 
@@ -799,6 +864,107 @@
     try { await navigator.clipboard.writeText($('apiKeyVal').textContent); toast('API key copied.'); }
     catch { toast('Copy failed — select manually.'); }
   });
+
+  /* ---------- OWASP Top 10 ---------- */
+  const OWASP_ITEMS = [
+    {
+      id: 'A01', year: '2021', title: 'Broken Access Control',
+      icon: 'lock-open',
+      risk: 77, // rank by incidence in OWASP data
+      desc: 'Users can act outside of their intended permissions — viewing or modifying other people\'s data by swapping identifiers.',
+      seen: 'IDOR / BOLA rule — cross-object access on statements, API keys, job applications and user details; horizontal enumeration sweep; the trace join proves which SQL statement leaked whose row.',
+      demo: 'Log in as any customer, open another user\'s statement or API key — the SOC raises a Possibe-IDOR alert with the exact query.',
+    },
+    {
+      id: 'A03', year: '2021', title: 'Injection',
+      icon: 'code',
+      risk: 94,
+      desc: 'Untrusted data is interpreted as code — SQL, or HTML/JavaScript reflected back into the page.',
+      seen: 'SQL injection probing rule (email update interpolates straight into UPDATE — error-based and stacked payloads execute) and the reflected XSS rule (careers search echoes the raw query into an innerHTML sink); both ladder severity per attempt.',
+      demo: 'Email x@y.z\' AND 1=(SELECT 1/0)-- - in the Profile tab, or search <img src=x onerror=alert(1)> in Careers.',
+    },
+    {
+      id: 'A04', year: '2021', title: 'Insecure Design',
+      icon: 'layers',
+      risk: 68,
+      desc: 'Missing or flawed business-logic invariants — the app allows operations the business never intended.',
+      seen: 'Business-logic rule — negative transfers (balance inflation) and overdrafts beyond the floor trip BIZLOGIC alerts with the loopback SQL chain that mutated the ledger.',
+      demo: 'Send a negative transfer or an overdraft far past the balance — watch the ledger invariant alert.',
+    },
+    {
+      id: 'A05', year: '2021', title: 'Security Misconfiguration',
+      icon: 'settings',
+      risk: 61,
+      desc: 'Insecure defaults, verbose errors, exposed debug endpoints and incomplete hardening.',
+      seen: 'The target ships GraphiQL open at /graphql and returns raw database errors on the vulnerable email update — the SOC captures the DB error text in the alert evidence.',
+      demo: 'Open :5000/graphql — the interactive IDE is exposed; a SQLi attempt leaks the Postgres error message.',
+    },
+    {
+      id: 'A07', year: '2021', title: 'Identification & Authentication Failures',
+      icon: 'key',
+      risk: 72,
+      desc: 'Credential stuffing, weak session handling, session tokens replayed from other machines.',
+      seen: 'Session-hijack rule — a session token replayed from a different IP/user-agent is anchored at login (token + IP recorded) and flagged the moment it moves; login events are audit-logged with their full origin.',
+      demo: 'Copy a session token, replay it from another machine — the hijack alert fires.',
+    },
+    {
+      id: 'A09', year: '2021', title: 'Security Logging & Monitoring Failures',
+      icon: 'activity',
+      risk: 88,
+      desc: 'Without auditable logs bound to requests, breaches go undetected for months.',
+      seen: 'The core of Loopback: every API request is bound (trace-joined) to the exact SQL it produced, stored in PostgreSQL, correlated over a session window and alerted — plus a full operator audit log of every response action.',
+      demo: 'This console: Overview → Traffic Stream → Alerts → Response Actions is the live A09 answer.',
+    },
+  ];
+
+  const OWASP_ICONS = {
+    'lock-open': '<path d="M7 11V7a5 5 0 0 1 9.9-1"/><rect x="3" y="11" width="18" height="11" rx="2"/>',
+    'code': '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+    'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    'key': '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  };
+  let owaspRendered = false;
+  function renderOwasp() {
+    if (owaspRendered) return;
+    const list = $('owaspList');
+    list.innerHTML = OWASP_ITEMS.map((it, i) => `
+      <div class="owasp-item" style="animation-delay:${i * 80}ms">
+        <button class="owasp-head" data-owasp="${it.id}" type="button">
+          <span class="owasp-rank">${it.id}:2021</span>
+          <span class="owasp-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${OWASP_ICONS[it.icon] || ''}</svg>
+          </span>
+          <span class="owasp-title">
+            <strong>${esc(it.title)}</strong>
+            <span class="muted">${esc(it.desc)}</span>
+          </span>
+          <span class="owasp-meter"><span style="width:${it.risk}%"></span></span>
+          <span class="owasp-chevron">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </button>
+        <div class="owasp-body hidden">
+          <div class="owasp-map">
+            <h5>In Loopback</h5>
+            <p>${esc(it.seen)}</p>
+          </div>
+          <div class="owasp-map">
+            <h5>Try it</h5>
+            <p>${esc(it.demo)}</p>
+          </div>
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('.owasp-head').forEach((head) => {
+      head.addEventListener('click', () => {
+        const body = head.nextElementSibling;
+        body.classList.toggle('hidden');
+        head.classList.toggle('open');
+      });
+    });
+    owaspRendered = true;
+  }
 
   $('apiKeyRotate').addEventListener('click', async () => {
     const res = await api('/api/settings/apikey/rotate', { method: 'POST' });

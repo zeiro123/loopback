@@ -21,7 +21,7 @@ export function requireSocKey(req, res) {
 
 export async function handleControl(req, res) {
   if (!requireSocKey(req, res)) return;
-  const { kind, value, reason, source } = req.body || {};
+  const { kind, value, reason, source, durationMs } = req.body || {};
   if (!kind || value == null) {
     return res.status(400).json({ success: false, error: 'kind and value are required' });
   }
@@ -36,8 +36,12 @@ export async function handleControl(req, res) {
   if (!['block_user', 'revoke_session'].includes(kind)) {
     return res.status(400).json({ success: false, error: `unknown control kind: ${kind}` });
   }
-  const control = await applyControl({ kind, value: String(value), reason, source: source || 'manual' });
-  console.log(`[target/soc-control] ${kind} ${value} (${source || 'manual'})`);
+  // Temporary bans carry a duration (ms); permanent ones expire never.
+  const expiresAt = Number.isFinite(Number(durationMs)) && Number(durationMs) > 0
+    ? new Date(Date.now() + Number(durationMs)).toISOString()
+    : null;
+  const control = await applyControl({ kind, value: String(value), reason, source: source || 'manual', expiresAt });
+  console.log(`[target/soc-control] ${kind} ${value}${expiresAt ? ` until ${expiresAt}` : ''} (${source || 'manual'})`);
   res.json({ success: true, control });
 }
 

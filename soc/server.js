@@ -18,7 +18,7 @@ import {
   listAlerts, listEvents, listTrackedUsers, userActivity, userAlerts, userActions,
   stats, severityBreakdown, clearAll,
   listActions, getSettings, setSetting,
-  latestRiskByActor, riskHistory, insertAction, setAlertResponse, validateOperator,
+  latestRiskByActor, riskHistory, insertAction, setAlertResponse, mergeAlertResponse, validateOperator,
   getOperatorByUsername, updateOperatorPhone,
 } from './db.js';
 import { evaluateEvent } from './correlate.js';
@@ -243,29 +243,51 @@ app.get('/api/actions', requireOperator, async (_req, res) => {
 });
 
 app.post('/api/actions', requireOperator, async (req, res) => {
-  const { kind, value, reason, alertId } = req.body || {};
+  const { kind, value, reason, alertId, durationMs } = req.body || {};
   if (!kind || value == null) {
     return res.status(400).json({ success: false, error: 'kind and value are required' });
   }
-  const valid = ['block_user', 'unblock_user', 'revoke_session', 'dismiss_alert'];
+  const valid = ['block_user', 'unblock_user', 'revoke_session', 'dismiss_alert', 'escalate_alert'];
   if (!valid.includes(kind)) {
     return res.status(400).json({ success: false, error: `kind must be one of ${valid.join(', ')}` });
   }
   if (kind === 'dismiss_alert') {
-    await setAlertResponse(String(value), {
-      dismissed: true, by: req.operator, at: new Date().toISOString(),
-    });
+    await mergeAlertResponse(String(value), { dismissed: true, by: req.operator, at: new Date().toISOString() });
     const action = await insertAction({ kind, targetValue: String(value), reason: reason || 'Alert dismissed by operator', source: 'manual', operator: req.operator, alertId: String(value) });
     return res.json({ success: true, action });
   }
-  const result = await applyAction({ kind, value, reason: reason || `${kind} by operator`, source: 'manual', operator: req.operator, alertId: alertId || null });
+  if (kind === 'escalate_alert') {
+    // Escalate for investigation: priority flag on the alert + audit-log entry.
+    await mergeAlertResponse(String(value), { escalated: { by: req.operator, at: new Date().toISOString(), note: reason || 'Escalated for investigation' } });
+    const action = await insertAction({ kind, targetValue: String(value), reason: reason || 'Escalated for investigation by operator', source: 'manual', operator: req.operator, alertId: String(value) });
+    return res.json({ success: true, action });
+  }
+  const result = await applyAction({ kind, value, reason: reason || `${kind} by operator`, source: 'manual', operator: req.operator, alertId: alertId || null, durationMs: durationMs || null });
   if (kind === 'block_user' && alertId) {
-    await setAlertResponse(String(alertId), { blocked: true, by: req.operator, at: new Date().toISOString() });
+    await mergeAlertResponse(String(alertId), {
+      blocked: true, by: req.operator, at: new Date().toISOString(),
+      permanent: !(Number(durationMs) > 0),
+      suspendedUntil: result.push?.data?.control?.expires_at || null,
+    });
   }
   if (kind === 'revoke_session' && alertId) {
-    await setAlertResponse(String(alertId), { sessionRevoked: true, by: req.operator, at: new Date().toISOString() });
+    await mergeAlertResponse(String(alertId), { sessionRevoked: true, by: req.operator, at: new Date().toISOString() });
   }
   res.json({ success: result.push.ok, action: result.action, push: result.push });
+});
+
+// Active bans, straight from the target's control plane (with expiry).
+app.get('/api/bans', requireOperator, async (_req, res) => {
+  try {
+    const key = process.env.SOC_CONTROL_KEY || 'loopback-soc-key';
+    const targetUrl = process.env.TARGET_URL || 'http://localhost:5000';
+    const r = await fetch(`${targetUrl}/api/soc/controls/poll`, { headers: { 'x-soc-key': key } });
+    const data = await r.json().catch(() => ({}));
+    const bans = (data.controls || []).filter((c) => c.kind === 'block_user');
+    res.json({ success: true, bans });
+  } catch (err) {
+    res.json({ success: false, error: err.message, bans: [] });
+  }
 });
 
 /* ==========================================================================

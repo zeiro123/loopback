@@ -24,7 +24,7 @@ import {
   listBlogPosts, getBlogPost, listComments, addComment,
   listJobs, getJob, searchJobs, createApplication, listApplicationsForUser, getApplication, withdrawApplication,
   saveChat, listChat,
-  isUserBlocked, isSessionRevoked,
+  isUserBlocked, isSessionRevoked, getActiveBan,
 } from './db.js';
 import { buildStatement } from './db.js';
 import {
@@ -117,6 +117,17 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
+// Human-readable time remaining for temporary bans
+function formatRemaining(expiresAt) {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return '0m';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ${mins % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body || {};
   setParams({ username });
@@ -127,10 +138,21 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user || user.password !== String(password).trim()) {
     return res.status(401).json({ success: false, error: 'Invalid username or password' });
   }
-  // Control enforcement 3: SOC-blocked users cannot sign in.
+  // Control enforcement 3: SOC-blocked users cannot sign in. Temporary bans
+  // report the reason and the remaining time; expired bans lift automatically.
   if (await isUserBlocked(user.id)) {
+    const ban = await getActiveBan(user.id);
     setMeta({ login: 'blocked' });
-    return res.status(403).json({ success: false, error: 'Account blocked by security operations. Contact support.', code: 'USER_BLOCKED' });
+    const remaining = ban?.expires_at ? formatRemaining(ban.expires_at) : null;
+    return res.status(403).json({
+      success: false,
+      error: ban?.expires_at
+        ? `Account temporarily suspended by security operations — ${remaining} remaining.`
+        : 'Account blocked by security operations. Contact support.',
+      code: 'USER_BLOCKED',
+      suspendedUntil: ban?.expires_at || null,
+      banReason: ban?.reason || null,
+    });
   }
   const token = await createSession(user.id);
   const account = await getAccountByUserId(user.id);

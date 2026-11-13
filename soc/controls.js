@@ -12,12 +12,12 @@ const SOC_CONTROL_KEY = process.env.SOC_CONTROL_KEY || 'loopback-soc-key';
 
 const SEVERITY_RANK = { INFO: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
 
-async function pushToTarget(kind, value, reason, source) {
+async function pushToTarget(kind, value, reason, source, durationMs = null) {
   try {
     const res = await fetch(`${TARGET_URL}/api/soc/controls`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-soc-key': SOC_CONTROL_KEY },
-      body: JSON.stringify({ kind, value: String(value), reason, source }),
+      body: JSON.stringify({ kind, value: String(value), reason, source, ...(durationMs ? { durationMs } : {}) }),
     });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, data };
@@ -30,10 +30,11 @@ async function pushToTarget(kind, value, reason, source) {
 /**
  * Apply a response action: push it to the target and record it.
  */
-export async function applyAction({ kind, value, reason, source = 'manual', operator = null, alertId = null }) {
-  const push = await pushToTarget(kind, value, reason, source);
+export async function applyAction({ kind, value, reason, source = 'manual', operator = null, alertId = null, durationMs = null }) {
+  const expiresAt = Number(durationMs) > 0 ? new Date(Date.now() + Number(durationMs)).toISOString() : null;
+  const push = await pushToTarget(kind, value, reason, source, expiresAt ? Number(durationMs) : null);
   const action = await insertAction({
-    kind, targetValue: String(value), reason, source, operator, alertId,
+    kind, targetValue: String(value), reason, source, operator, alertId, expiresAt,
   });
   return { action, push };
 }

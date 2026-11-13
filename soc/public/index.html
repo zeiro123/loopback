@@ -66,6 +66,9 @@
         <button class="nav-btn" data-tab="terms" type="button">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 12h18"/></svg>
           Terms</button>
+        <button class="nav-btn" data-tab="owasp" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          OWASP Top 10</button>
       </nav>
       <div class="side-foot">
         <button class="profile-btn" id="opProfileBtn" type="button" title="Operator profile">
@@ -222,6 +225,11 @@
       <!-- ========== ACTIONS ========== -->
       <section id="panel-actions" class="panel">
         <p class="panel-hint">Every response action — manual (operator) and autonomous (risk engine) — with its reason and trigger.</p>
+        <div id="activeBansCard" class="card bans-card hidden">
+          <h3>Active bans</h3>
+          <p class="muted">Users the SOC has locked out of the bank. Temporary bans lift automatically when they expire.</p>
+          <div id="activeBansBody"></div>
+        </div>
         <div class="filter-row">
           <span class="fchip active" data-src="">ALL</span>
           <span class="fchip" data-src="manual">MANUAL</span>
@@ -352,6 +360,20 @@ query {
           <div class="manual-card"><h4>Blocking</h4><p>A blocked user loses all live sessions immediately, cannot sign in again, and receives HTTP 403 on every bank API call. Individually revoked sessions die instantly too.</p></div>
           <div class="manual-card"><h4>Triggering detections</h4><p>From the bank on :5000: swap account numbers on statements or API keys (IDOR), submit negative or oversized transfers (business logic), sweep several accounts fast (enumeration), or ask the chatbot about another client's balance.</p></div>
         </div>
+      </section>
+
+      <!-- ========== OWASP TOP 10 ========== -->
+      <section id="panel-owasp" class="panel">
+        <div class="owasp-hero">
+          <div class="owasp-shield">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h2>OWASP Top 10 — how Loopback maps to it</h2>
+            <p class="muted">The 2021 OWASP Top 10, with each risk mapped to the detection, trace or control this framework demonstrates. Expand a row for the mapping.</p>
+          </div>
+        </div>
+        <div class="owasp-list" id="owaspList"></div>
       </section>
 
       <!-- ========== TERMS ========== -->

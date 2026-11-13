@@ -109,6 +109,59 @@ body { font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif; backgroun
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(45,212,191,.35), rgba(52,211,153,.55)); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(45,212,191,.7); border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------- ban controls, escalation + active-bans card ---------- */
+.ban-group { display: inline-flex; align-items: stretch; gap: 0; }
+.ban-select { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-right: 0; border-radius: 10px 0 0 10px; font-size: 12.5px; padding: 0 8px; cursor: pointer; outline: none; }
+.ban-select:focus { border-color: var(--accent); }
+.ban-group .btn.danger { border-radius: 0 10px 10px 0; }
+.btn.escalate { border: 1px solid rgba(251,191,36,.45); color: #fbbf24; background: rgba(251,191,36,.08); }
+.btn.escalate:hover { background: rgba(251,191,36,.16); }
+.ban-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .8px; padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+.ban-badge.perm { background: rgba(248,113,113,.14); color: #f87171; border: 1px solid rgba(248,113,113,.35); }
+.ban-badge.temp { background: rgba(251,191,36,.12); color: #fbbf24; border: 1px solid rgba(251,191,36,.35); }
+.ban-badge.done { background: rgba(148,163,184,.12); color: #94a3b8; border: 1px solid rgba(148,163,184,.3); }
+.ban-badge.esc { background: rgba(192,132,252,.12); color: #c084fc; border: 1px solid rgba(192,132,252,.35); }
+.bans-card { margin-bottom: 16px; border: 1px solid rgba(248,113,113,.25); }
+.ban-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; background: color-mix(in srgb, var(--card) 70%, transparent); }
+.ban-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ban-reason { font-size: 11.5px; }
+.ban-side { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* ---------- overview retouch: hover lift + staggered entrances ---------- */
+.stat { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; animation: riseIn .45s cubic-bezier(.2,.7,.3,1) backwards; }
+.stat:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(0,0,0,.35); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.sev-bar { animation: riseIn .5s cubic-bezier(.2,.7,.3,1) backwards; }
+.sev-bar .sfill { transition: width .7s cubic-bezier(.2,.7,.3,1); }
+.risk-row .rfill { transition: width .7s cubic-bezier(.2,.7,.3,1); }
+.mini-row { transition: background .15s ease; }
+.mini-row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ---------- OWASP Top 10 tab ---------- */
+.owasp-hero { display: flex; align-items: center; gap: 16px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 18px; background: radial-gradient(500px 160px at 0% 0%, rgba(45,212,191,.09), transparent), var(--card); margin-bottom: 18px; animation: riseIn .5s ease backwards; }
+.owasp-shield { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #2dd4bf; background: rgba(45,212,191,.1); border: 1px solid rgba(45,212,191,.3); animation: shieldPulse 2.6s ease-in-out infinite; flex: none; }
+@keyframes shieldPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(45,212,191,.25); } 50% { box-shadow: 0 0 0 8px rgba(45,212,191,0); } }
+.owasp-hero h2 { margin: 0 0 4px; font-size: 19px; }
+.owasp-hero .muted { margin: 0; font-size: 13.5px; }
+.owasp-list { display: flex; flex-direction: column; gap: 10px; }
+.owasp-item { border: 1px solid var(--line); border-radius: 16px; background: var(--card); overflow: hidden; animation: riseIn .5s cubic-bezier(.2,.7,.3,1) backwards; transition: border-color .2s ease; }
+.owasp-item:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.owasp-head { display: flex; align-items: center; gap: 14px; width: 100%; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 14px 18px; text-align: left; font: inherit; }
+.owasp-rank { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #2dd4bf; background: rgba(45,212,191,.1); border: 1px solid rgba(45,212,191,.3); border-radius: 8px; padding: 4px 9px; flex: none; }
+.owasp-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--fg); background: color-mix(in srgb, var(--accent) 10%, transparent); flex: none; }
+.owasp-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.owasp-title strong { font-size: 14.5px; }
+.owasp-title .muted { font-size: 12.5px; }
+.owasp-meter { width: 130px; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 8%, transparent); overflow: hidden; flex: none; }
+.owasp-meter > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #34d399, #fbbf24, #f87171); animation: meterIn 1.1s cubic-bezier(.2,.7,.3,1) backwards; }
+@keyframes meterIn { from { width: 0 !important; } }
+.owasp-chevron { color: var(--muted-fg); transition: transform .25s ease; flex: none; }
+.owasp-head.open .owasp-chevron { transform: rotate(180deg); }
+.owasp-body { border-top: 1px solid var(--line); padding: 14px 18px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; animation: riseIn .3s ease; }
+.owasp-map h5 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: #2dd4bf; }
+.owasp-map p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--fg); }
+@media (max-width: 900px) { .owasp-body { grid-template-columns: 1fr; } .owasp-meter { display: none; } }
 .content { flex: 1; padding: 28px 32px 90px; max-width: 1340px; }
 .panel { display: none; }
 .panel.active { display: block; animation: fade .22s ease; }
