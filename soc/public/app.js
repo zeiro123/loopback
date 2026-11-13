@@ -7,7 +7,14 @@
     token: sessionStorage.getItem(TOKEN_KEY) || null,
     alerts: [],
     events: [],
+    users: [],
+    actions: [],
+    sevFilter: '',
+    typeFilter: '',
+    srcFilter: '',
+    currentUser: null,
     pollTimer: null,
+    apiKey: null,
   };
 
   async function api(path, opts = {}) {
@@ -24,14 +31,29 @@
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function timeOf(ts) {
-    try { return new Date(ts).toISOString().replace('T', ' ').substring(11, 19); } catch { return '—'; }
+  function timeOf(ts, full = false) {
+    try {
+      const d = new Date(ts).toISOString();
+      return full ? d.replace('T', ' ').slice(0, 19) : d.slice(11, 19);
+    } catch { return '—'; }
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
   }
 
   /* ---------- gate ---------- */
   $('gateForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('gateError').classList.add('hidden');
+    const btn = $('gateBtn');
+    btn.disabled = true;
+    btn.textContent = 'Authenticating…';
     try {
       const { ok, data } = await api('/api/login', {
         method: 'POST',
@@ -43,6 +65,11 @@
         el.classList.remove('hidden');
         return;
       }
+      // Show the login flow the SOC processed for this operator
+      const flow = $('gateFlow');
+      flow.classList.remove('hidden');
+      flow.innerHTML = (data.loginFlow || []).map((s, i) => `<div>✓ step ${i + 1}: ${esc(s)}</div>`).join('');
+      await new Promise((r) => setTimeout(r, 700));
       state.token = data.token;
       sessionStorage.setItem(TOKEN_KEY, data.token);
       enterConsole();
@@ -50,6 +77,9 @@
       const el = $('gateError');
       el.textContent = 'Network error — is the SOC server running?';
       el.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Access Console';
     }
   });
 
@@ -67,72 +97,123 @@
     $('gate').classList.add('hidden');
     $('console').classList.remove('hidden');
     refreshAll();
+    loadSettings();
     if (state.pollTimer) clearInterval(state.pollTimer);
     state.pollTimer = setInterval(refreshAll, 2500);
   }
 
   /* ---------- tabs ---------- */
-  document.querySelectorAll('.soc-tab').forEach((tab) => {
+  document.querySelectorAll('.nav-btn').forEach((tab) => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.soc-tab').forEach((t) => t.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
       $(`panel-${tab.dataset.tab}`).classList.add('active');
+      const which = tab.dataset.tab;
+      if (which === 'actions') loadActions();
+      if (which === 'users') loadUsers();
     });
   });
 
-  /* ---------- data ---------- */
+  /* ---------- refresh core ---------- */
   async function refreshAll() {
-    const [statsRes, eventsRes, alertsRes, sessionsRes] = await Promise.all([
+    const [statsRes, eventsRes, alertsRes, usersRes] = await Promise.all([
       api('/api/stats'),
       api('/api/events?limit=250'),
       api('/api/alerts'),
-      api('/api/sessions'),
+      api('/api/users'),
     ]);
-    if (statsRes.ok) renderStats(statsRes.data.stats);
+    if (usersRes.ok) { state.users = usersRes.data.users || []; renderUsersTable(); }
+    if (alertsRes.ok) { state.alerts = alertsRes.data.alerts || []; renderAlerts(); }
+    if (statsRes.ok) renderOverview(statsRes.data);
     if (eventsRes.ok) renderTraffic(eventsRes.data.events || []);
-    if (alertsRes.ok) renderAlerts(alertsRes.data.alerts || []);
-    if (sessionsRes.ok) renderSessions(sessionsRes.data.sessions || []);
+    if (statsRes.ok) loadRecentActions();
   }
 
-  function renderStats(s) {
+  async function loadRecentActions() {
+    const res = await api('/api/actions?limit=12');
+    if (res.ok) renderRecentActions(res.data.actions || []);
+  }
+
+  /* ---------- overview ---------- */
+  function renderOverview({ stats: s, severityBreakdown: sev }) {
     if (!s) return;
     $('stApi').textContent = s.api_events ?? 0;
     $('stDb').textContent = s.db_events ?? 0;
     $('stAlerts').textContent = s.alerts ?? 0;
     $('stCritical').textContent = s.critical ?? 0;
     $('stActors').textContent = s.actors ?? 0;
+    $('stBlocked').textContent = s.blocked_users ?? 0;
+    $('stAuto').textContent = s.autonomous_actions ?? 0;
+    $('stRisk').textContent = s.avg_risk ?? 0;
     const pill = $('alertCount');
     pill.textContent = s.alerts ?? 0;
     pill.classList.toggle('hidden', !(s.alerts > 0));
+
+    const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'INFO'];
+    const maxN = Math.max(1, ...(sev || []).map((x) => x.n));
+    $('sevBars').innerHTML = order.map((o) => {
+      const n = sev?.find((x) => x.severity === o)?.n ?? 0;
+      return `<div class="sev-bar sev-${o}"><span class="slabel">${o}</span><span class="sbar"><span class="sfill" style="width:${Math.round((n / maxN) * 100)}%"></span></span><span class="snum">${n}</span></div>`;
+    }).join('');
+
+    const top = [...state.users].sort((a, b) => (b.risk || 0) - (a.risk || 0)).slice(0, 6);
+    $('riskBoard').innerHTML = top.length
+      ? top.map((u) => `<div class="risk-row"><span class="rname">${esc(u.username || `#${u.actor_id}`)}</span><span class="rbar"><span class="rfill risk-${u.risk_level}" style="width:${u.risk || 0}%"></span></span><span class="rscore">${u.risk || 0}</span></div>`).join('')
+      : '<div class="mini-row"><span class="x muted">No tracked users yet</span></div>';
+
+    const ra = state.alerts.slice(0, 6);
+    $('recentAlerts').innerHTML = ra.length
+      ? ra.map((a) => `<div class="mini-row"><span class="t">${timeOf(a.ts)}</span><span class="s sev-${a.severity}" style="color:inherit">${a.severity}</span><span class="x">${esc(a.title)}</span></div>`).join('')
+      : '<div class="mini-row"><span class="x muted">No alerts yet</span></div>';
+  }
+
+  async function renderRecentActions(actions) {
+    $('recentActions').innerHTML = actions.length
+      ? actions.slice(0, 6).map((a) => `<div class="mini-row"><span class="t">${timeOf(a.ts)}</span><span class="s src-${String(a.source).toUpperCase()}">${esc(a.source)}</span><span class="x">${esc(a.kind)} → ${esc(String(a.target_value).slice(0, 20))}</span></div>`).join('')
+      : '<div class="mini-row"><span class="x muted">No actions yet</span></div>';
   }
 
   /* ---------- live traffic ---------- */
+  function trafficFilters(events) {
+    const fApi = $('fApi').value;
+    const fUser = $('fUser').value.trim().toLowerCase();
+    const fEp = $('fEp').value.trim().toLowerCase();
+    return events.filter((e) =>
+      (!fApi || e.api === fApi) &&
+      (!fUser || String(e.username || '').toLowerCase().includes(fUser)) &&
+      (!fEp || String(e.endpoint).toLowerCase().includes(fEp))
+    );
+  }
+
   function renderTraffic(events) {
     state.events = events;
     const stream = $('trafficStream');
-    if (!events.length) {
-      stream.innerHTML = '<div class="ev-row"><span class="muted">[NO TRAFFIC YET — OPEN THE BANKING PORTAL ON :5000 AND MAKE REQUESTS]</span></div>';
+    const filtered = trafficFilters(events);
+    if (!filtered.length) {
+      stream.innerHTML = '<div class="ev-row"><span class="muted">[NO TRAFFIC — OPEN THE BANKING PORTAL ON :5000 AND MAKE REQUESTS]</span></div>';
       return;
     }
     const frag = document.createDocumentFragment();
-    for (const e of events) {
+    for (const e of filtered) {
       const row = document.createElement('div');
       row.className = 'ev-row';
       const err = e.status_code >= 400;
       const apiChip = String(e.api || 'rest').toUpperCase();
       const op = e.operation ? ` • ${esc(e.operation)}` : '';
+      const dev = e.user_agent ? String(e.user_agent).replace(/\([^)]*\)/g, '').trim().split(' ').slice(0, 2).join(' ') : '—';
       row.innerHTML = `
         <span class="ts">${timeOf(e.ts)}</span>
         <span class="api-chip api-${apiChip === 'GRAPHQL' ? 'GRAPHQL' : 'REST'}">${apiChip}</span>
         <span class="user">${esc(e.username || 'ANON')}</span>
+        <span class="uid">#${e.actor_id ?? '–'}</span>
+        <span class="ipdev">${esc(e.ip || '')} · ${esc(dev)}</span>
         <span class="ep">${esc(e.method)} ${esc(e.endpoint)}${op}</span>
         <span class="${err ? 'status-err' : 'status-ok'}">${e.status_code}</span>
         <span class="trace-tag">⌥ ${esc(String(e.trace_id).slice(0, 8))}</span>`;
       frag.appendChild(row);
 
-      const queries = e.db_queries || [];
-      for (const q of queries) {
+      for (const q of e.db_queries || []) {
         const sub = document.createElement('div');
         sub.className = 'db-sub';
         sub.innerHTML = `<span class="tag">SQL</span>${esc(q.template || q.query)}${q.rowCount != null ? ` <span class="trace-tag">(${q.rowCount} rows)</span>` : ''}`;
@@ -143,9 +224,153 @@
     stream.appendChild(frag);
   }
 
+  ['fApi', 'fUser', 'fEp'].forEach((id) => $(id).addEventListener('input', () => renderTraffic(state.events)));
+
+  /* ---------- users ---------- */
+  async function loadUsers() {
+    const res = await api('/api/users');
+    if (res.ok) { state.users = res.data.users || []; renderUsersTable(); }
+  }
+
+  function renderUsersTable() {
+    const body = $('usersBody');
+    if (!state.users.length) {
+      body.innerHTML = '<tr><td colspan="11" class="muted mono" style="padding:16px">[NO TRACKED USERS YET — MAKE REQUESTS ON THE BANK]</td></tr>';
+      return;
+    }
+    body.innerHTML = '';
+    for (const u of state.users) {
+      const tr = document.createElement('tr');
+      const ips = (u.ips || []).slice(0, 2).join(', ') || '—';
+      const dev = (u.devices || [])[0];
+      const device = dev ? `${String(dev.ua || '').replace(/\([^)]*\)/g, '').trim().split(' ').slice(0, 2).join(' ')}` : '—';
+      tr.innerHTML = `
+        <td class="mono">${u.actor_id}</td>
+        <td><strong>${esc(u.username || '—')}</strong></td>
+        <td class="mono">${esc(ips)}</td>
+        <td>${u.api_events}</td>
+        <td>${u.distinct_endpoints}</td>
+        <td>${u.errors || 0}</td>
+        <td>${u.alerts}</td>
+        <td><span class="risk-pill"><span class="risk-dot risk-${u.risk_level}" style="background:var(--${u.risk_level === 'CRITICAL' ? 'rose' : u.risk_level === 'HIGH' ? 'amber' : u.risk_level === 'ELEVATED' ? 'cyan' : 'emerald'})"></span>${u.risk || 0} ${esc(u.risk_level || '')}</span></td>
+        <td><span class="status-chip st-${u.blocked ? 'BLOCKED' : 'ACTIVE'}">${u.blocked ? 'BLOCKED' : 'ACTIVE'}</span></td>
+        <td class="mono">${timeOf(u.last_seen, true)}</td>
+        <td><button class="btn ghost small" data-uid="${u.actor_id}" type="button">Investigate</button></td>`;
+      tr.querySelector('[data-uid]').addEventListener('click', () => openUser(u.actor_id));
+      body.appendChild(tr);
+    }
+  }
+
+  async function openUser(actorId) {
+    state.currentUser = actorId;
+    const res = await api(`/api/users/${actorId}`);
+    if (!res.ok) return;
+    const d = res.data;
+    $('userDetail').classList.remove('hidden');
+    const u = state.users.find((x) => x.actor_id === actorId) || {};
+    $('udTitle').textContent = `${u.username || 'User'} (ID ${actorId}) — investigation view`;
+
+    const devices = (u.devices || []).map((x) => `${x.ip} — ${String(x.ua || '').slice(0, 60)}`).join('<br/>') || '—';
+    $('udProfile').innerHTML = `
+      <h3>Identity &amp; devices</h3>
+      <div class="profile-line"><span class="plabel">Client ID</span><span class="pval">${actorId}</span></div>
+      <div class="profile-line"><span class="plabel">Username</span><span class="pval">${esc(u.username || '—')}</span></div>
+      <div class="profile-line"><span class="plabel">IPs seen</span><span class="pval">${esc((u.ips || []).join(', ') || '—')}</span></div>
+      <div class="profile-line"><span class="plabel">Devices</span><span class="pval">${devices}</span></div>
+      <div class="profile-line"><span class="plabel">First seen</span><span class="pval">${timeOf(u.first_seen, true) || '—'}</span></div>
+      <div class="profile-line"><span class="plabel">Last seen</span><span class="pval">${timeOf(u.last_seen, true) || '—'}</span></div>
+      <div class="profile-line"><span class="plabel">Requests / SQL endpoints</span><span class="pval">${u.api_events} / ${u.distinct_endpoints} classes</span></div>
+      <div class="profile-line"><span class="plabel">Errors</span><span class="pval">${u.errors || 0}</span></div>
+      <div class="profile-line"><span class="plabel">Alerts</span><span class="pval">${u.alerts}</span></div>`;
+
+    const r = d.risk;
+    $('udRisk').innerHTML = r
+      ? `<div class="profile-line"><span class="plabel">Risk score</span><span class="pval"><strong>${r.score}</strong> / 100 (${esc(r.level)})</span></div>` +
+        (r.features?.contributions || []).map((f) => `
+          <div class="risk-feature">
+            <div class="rf-top"><span class="rf-name">${esc(f.name)}</span><span class="rf-val">${f.value} → +${f.contribution} / ${f.weight}</span></div>
+            <div class="rf-bar"><div class="rf-fill" style="width:${Math.round((f.contribution / f.weight) * 100)}%"></div></div>
+            <div class="muted" style="font-size:10px">${esc(f.describe)}</div>
+          </div>`).join('')
+      : '<span class="muted">No risk data yet.</span>';
+
+    $('udActions').innerHTML = (d.actions || []).length
+      ? d.actions.slice(0, 8).map((a) => `<div class="mini-row"><span class="t">${timeOf(a.ts, true)}</span><span class="s src-${String(a.source).toUpperCase()}">${esc(a.source)}</span><span class="x">${esc(a.kind)} — ${esc(String(a.reason || '').slice(0, 90))}</span></div>`).join('')
+      : '<div class="mini-row"><span class="x muted">No actions taken on this user yet.</span></div>';
+
+    const tl = $('udActivity');
+    tl.innerHTML = '';
+    for (const e of (d.activity || []).slice(0, 60)) {
+      const row = document.createElement('div');
+      row.className = 'tl-row';
+      const err = e.status_code >= 400;
+      row.innerHTML = `
+        <span class="ts">${timeOf(e.ts, true)}</span>
+        <span class="ep">${esc(e.method)} ${esc(e.endpoint)} → <span class="${err ? 'status-err' : 'status-ok'}">${e.status_code}</span> · ${esc(e.ip || '')} · ${esc(String(e.api || '').toUpperCase())}</span>
+        <span class="trace">${esc(String(e.trace_id).slice(0, 8))}</span>`;
+      tl.appendChild(row);
+      for (const q of e.db_queries || []) {
+        const sql = document.createElement('div');
+        sql.className = 'tl-sql';
+        sql.textContent = `↳ SQL ${q.template || q.query}`;
+        tl.appendChild(sql);
+      }
+    }
+    if (!(d.activity || []).length) tl.innerHTML = '<span class="muted mono">No activity recorded.</span>';
+    $('userDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  $('udClose').addEventListener('click', () => $('userDetail').classList.add('hidden'));
+
+  $('udBlock').addEventListener('click', async () => {
+    if (!state.currentUser) return;
+    await applyResponse('block_user', state.currentUser, `Blocked from investigation view (user ${state.currentUser})`);
+    loadUsers();
+    openUser(state.currentUser);
+  });
+  $('udRevoke').addEventListener('click', async () => {
+    if (!state.currentUser) return;
+    const res = await api(`/api/users/${state.currentUser}`);
+    const token = res.ok ? res.data.activity?.[0]?.session_token || res.data.activity?.find((a) => a.session_token)?.session_token : null;
+    if (!token) { toast('No live session token found in recent activity.'); return; }
+    await applyResponse('revoke_session', token, `Session revoked from investigation view (user ${state.currentUser})`);
+    loadUsers();
+  });
+  $('udUnblock').addEventListener('click', async () => {
+    if (!state.currentUser) return;
+    await applyResponse('unblock_user', state.currentUser, `Unblocked from investigation view (user ${state.currentUser})`);
+    loadUsers();
+    openUser(state.currentUser);
+  });
+
   /* ---------- alerts ---------- */
-  function renderAlerts(alerts) {
-    state.alerts = alerts;
+  document.querySelectorAll('#alertFilters .fchip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const parent = chip.parentElement;
+      const sevChips = parent.querySelectorAll('[data-sev]');
+      const typeChips = parent.querySelectorAll('[data-type]');
+      if (chip.dataset.sev != null && chip.dataset.sev !== undefined && chip.hasAttribute('data-sev')) {
+        sevChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.sevFilter = chip.dataset.sev || '';
+      } else {
+        typeChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.typeFilter = chip.dataset.type || '';
+      }
+      renderAlerts();
+    });
+  });
+
+  function filteredAlerts() {
+    return state.alerts.filter((a) =>
+      (!state.sevFilter || a.severity === state.sevFilter) &&
+      (!state.typeFilter || a.alert_type === state.typeFilter)
+    );
+  }
+
+  function renderAlerts() {
+    const alerts = filteredAlerts();
     $('alertsEmpty').classList.toggle('hidden', alerts.length > 0);
     const list = $('alertsList');
     list.innerHTML = '';
@@ -153,6 +378,11 @@
       const card = document.createElement('div');
       card.className = `alert-card sev-${a.severity}`;
       const eps = (a.affected_endpoints || []).length;
+      const resp = a.response || {};
+      const respBits = [];
+      if (resp.blocked) respBits.push('USER BLOCKED');
+      if (resp.sessionRevoked) respBits.push('SESSION REVOKED');
+      if (resp.dismissed) respBits.push('DISMISSED');
       card.innerHTML = `
         <div class="alert-top">
           <span class="sev-chip">${a.severity === 'INFO' ? 'INFORMATIONAL' : `${a.severity} SEVERITY`}</span>
@@ -165,41 +395,57 @@
         <div class="alert-summary">${esc(a.summary)}</div>
         <div class="alert-strip">
           <span>Actor: <strong>${esc(a.username || '—')}</strong></span>
-          <span>Endpoints touched: <strong>${eps}</strong></span>
-          ${a.is_cross_functional ? '<span class="cross-flag">⚑ CROSS-FUNCTIONAL MOVEMENT</span>' : ''}
+          <span>Endpoints: <strong>${eps}</strong></span>
+          ${a.is_cross_functional ? '<span class="cross-flag">⚑ CROSS-FUNCTIONAL</span>' : ''}
+          ${respBits.length ? `<span class="resp-flag">◈ ${respBits.join(' · ')}</span>` : ''}
           <span>Trace: <strong>${esc(String(a.evidence?.traceId || '').slice(0, 8))}</strong></span>
         </div>
         <div class="alert-actions">
           <button class="btn brain" data-act="path" type="button">Attack Path</button>
           <button class="btn ghost" data-act="evidence" type="button">Evidence</button>
+          <button class="btn danger" data-act="block" type="button">Block User</button>
+          <button class="btn warn" data-act="revoke" type="button">Revoke Session</button>
+          <button class="btn ghost" data-act="dismiss" type="button">Dismiss</button>
         </div>`;
       card.querySelector('[data-act="path"]').addEventListener('click', () => openPath(a));
       card.querySelector('[data-act="evidence"]').addEventListener('click', () => openEvidence(a));
+      card.querySelector('[data-act="block"]').addEventListener('click', () =>
+        applyResponse('block_user', a.actor_id ?? a.evidence?.actorId, `Blocked for ${a.alert_type} (${a.severity}) — ${a.title}`, a.id));
+      card.querySelector('[data-act="revoke"]').addEventListener('click', () => {
+        const token = a.evidence?.sessionToken || a.evidence?.session_token;
+        if (!token) { toast('No session token in this alert\'s evidence.'); return; }
+        applyResponse('revoke_session', token, `Session revoked for ${a.alert_type} — ${a.title}`, a.id);
+      });
+      card.querySelector('[data-act="dismiss"]').addEventListener('click', () =>
+        applyResponse('dismiss_alert', a.id, `Dismissed ${a.alert_type}`, a.id));
       list.appendChild(card);
     }
   }
 
-  /* ---------- attack path modal ---------- */
+  async function applyResponse(kind, value, reason, alertId) {
+    const res = await api('/api/actions', {
+      method: 'POST',
+      body: JSON.stringify({ kind, value: String(value), reason, alertId }),
+    });
+    if (res.ok && res.data.success) {
+      toast(`${kind} applied${res.data.push && res.data.push.ok === false ? ' (push to target failed — target offline?)' : ''}.`);
+      const alertsRes = await api('/api/alerts');
+      if (alertsRes.ok) { state.alerts = alertsRes.data.alerts || []; renderAlerts(); }
+      loadRecentActions();
+    } else {
+      toast(res.data?.error || 'Action failed.');
+    }
+  }
+
+  /* ---------- attack path (layered SVG) ---------- */
   function openPath(a) {
     $('pathTitle').textContent = a.title;
     $('pathSub').textContent = `${a.alert_type} • ${a.severity} • trace ${String(a.evidence?.traceId || '').slice(0, 8)}`;
     const ap = a.attack_path || {};
-    const nodes = ap.nodes || [];
-    const grid = $('pathNodes');
-    grid.innerHTML = '';
-    nodes.forEach((n, i) => {
-      const node = document.createElement('div');
-      node.className = 'path-node';
-      node.innerHTML = `
-        <span class="ptype ${esc(n.type)}">${esc(n.type)}</span>
-        <div class="plabel2">${esc(n.label)}</div>
-        <div class="pdetail">${esc(n.details)}</div>`;
-      grid.appendChild(node);
-    });
-    const steps = ap.steps || [];
+    renderPathGraph(ap.nodes || [], ap.edges || []);
     const stepsEl = $('pathSteps');
     stepsEl.innerHTML = '';
-    steps.forEach((s) => {
+    for (const s of ap.steps || []) {
       const row = document.createElement('div');
       row.className = 'step-row';
       row.innerHTML = `
@@ -210,16 +456,81 @@
         </div>
         <span class="step-status st-${esc(s.status)}">${esc(s.status)}</span>`;
       stepsEl.appendChild(row);
-    });
+    }
     $('pathModal').classList.remove('hidden');
   }
+
+  const LAYER_COLORS = {
+    device: '#fb7185', session: '#a78bfa', endpoint: '#22d3ee',
+    query: '#34d399', data: '#fbbf24', impact: '#818cf8',
+  };
+
+  function renderPathGraph(nodes, edges) {
+    const W = 760, colW = 120, nodeW = 112, nodeH = 74, y0 = 46;
+    const cols = [...new Set(nodes.map((n) => n.layer || 'api'))];
+    const byLayer = new Map(cols.map((c) => [c, []]));
+    nodes.forEach((n) => byLayer.get(n.layer || 'api').push(n));
+    const positions = [];
+    let maxRows = 1;
+    cols.forEach((c, ci) => {
+      const arr = byLayer.get(c);
+      maxRows = Math.max(maxRows, arr.length);
+      arr.forEach((n, ri) => {
+        const x = 30 + ci * (nodeW + colW);
+        const y = y0 + ri * (nodeH + 16);
+        positions.push({ node: n, x, y, col: ci });
+      });
+    });
+    const H = y0 + maxRows * (nodeH + 16) + 40;
+    const labels = cols.map((c, ci) => {
+      const x = 30 + ci * (nodeW + colW);
+      return `<text x="${x + nodeW / 2}" y="26" text-anchor="middle" fill="#8395b3" font-size="10" font-family="monospace" letter-spacing="1">${esc(c.toUpperCase())}</text>`;
+    }).join('');
+    const edgeLines = edges.map((e) => {
+      const f = positions[e.from];
+      const t = positions[e.to];
+      if (!f || !t) return '';
+      const x1 = f.x + nodeW, y1 = f.y + nodeH / 2;
+      const x2 = t.x, y2 = t.y + nodeH / 2;
+      const mid = (x1 + x2) / 2;
+      return `<path d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}" stroke="#2dd4bf55" fill="none" stroke-width="1.6"/>
+        <text x="${mid}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle" fill="#8395b3" font-size="8" font-family="monospace">${esc(e.label || '')}</text>`;
+    }).join('');
+    const nodeRects = positions.map((p) => {
+      const color = LAYER_COLORS[p.node.layer] || '#22d3ee';
+      const label = String(p.node.label || '').slice(0, 26);
+      const detail = String(p.node.details || '').slice(0, 60);
+      return `
+        <g>
+          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="10" fill="#0d1322" stroke="${color}" stroke-width="1.4"/>
+          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="4" rx="2" fill="${color}"/>
+          <text x="${p.x + 8}" y="${p.y + 22}" fill="#e6edf7" font-size="9" font-weight="bold" font-family="monospace">${esc(label)}</text>
+          ${wrapSvgText(detail, p.x + 8, p.y + 36, nodeW - 16, 9)}
+        </g>`;
+    }).join('');
+    $('pathGraph').innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${labels}${edgeLines}${nodeRects}</svg>`;
+  }
+
+  function wrapSvgText(text, x, y, maxW, size) {
+    const charsPerLine = Math.floor(maxW / (size * 0.52));
+    const words = String(text).split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).length > charsPerLine) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
+    }
+    if (cur) lines.push(cur);
+    return lines.slice(0, 4).map((l, i) =>
+      `<text x="${x}" y="${y + i * (size + 2)}" fill="#8395b3" font-size="${size}" font-family="monospace">${esc(l)}</text>`).join('');
+  }
+
   $('pathClose').addEventListener('click', () => $('pathModal').classList.add('hidden'));
   $('pathModal').addEventListener('click', (e) => { if (e.target === $('pathModal')) $('pathModal').classList.add('hidden'); });
 
   function openEvidence(a) {
     $('evTitle').textContent = a.title;
     $('evJson').textContent = JSON.stringify({
-      alert: { id: a.id, type: a.alert_type, severity: a.severity, attempts: a.attempts, crossFunctional: a.is_cross_functional },
+      alert: { id: a.id, type: a.alert_type, severity: a.severity, attempts: a.attempts, crossFunctional: a.is_cross_functional, response: a.response },
       affectedEndpoints: a.affected_endpoints,
       evidence: a.evidence,
       attackPathSteps: a.attack_path?.steps,
@@ -229,53 +540,83 @@
   $('evClose').addEventListener('click', () => $('evModal').classList.add('hidden'));
   $('evModal').addEventListener('click', (e) => { if (e.target === $('evModal')) $('evModal').classList.add('hidden'); });
 
-  /* ---------- sessions ---------- */
-  function renderSessions(sessions) {
-    const list = $('sessionsList');
-    list.innerHTML = '';
-    if (!sessions.length) {
-      list.innerHTML = '<span class="muted mono" style="font-size:11px">[NO SESSIONS YET]</span>';
+  /* ---------- actions log ---------- */
+  document.querySelectorAll('#panel-actions .fchip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#panel-actions .fchip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.srcFilter = chip.dataset.src || '';
+      loadActions();
+    });
+  });
+
+  async function loadActions() {
+    const res = await api('/api/actions?limit=200');
+    if (!res.ok) return;
+    const actions = (res.data.actions || []).filter((a) => !state.srcFilter || a.source === state.srcFilter);
+    const body = $('actionsBody');
+    body.innerHTML = '';
+    if (!actions.length) {
+      body.innerHTML = '<tr><td colspan="6" class="muted mono" style="padding:16px">[NO RESPONSE ACTIONS YET]</td></tr>';
       return;
     }
-    for (const s of sessions) {
-      const card = document.createElement('div');
-      card.className = 'session-card';
-      card.innerHTML = `
-        <div class="name">${esc(s.username)}</div>
-        <div class="meta">actor #${s.actor_id} • ${s.api_events} API events • ${s.distinct_endpoints} endpoint classes<br/>last seen ${timeOf(s.last_seen)}</div>`;
-      card.addEventListener('click', () => openTimeline(s));
-      list.appendChild(card);
+    for (const a of actions) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono">${timeOf(a.ts, true)}</td>
+        <td><strong>${esc(a.kind)}</strong></td>
+        <td class="mono">${esc(String(a.target_value).slice(0, 26))}</td>
+        <td><span class="s src-${String(a.source).toUpperCase()}">${esc(a.source)}</span></td>
+        <td class="mono">${esc(a.operator || '—')}</td>
+        <td class="muted" style="max-width:340px">${esc(String(a.reason || '').slice(0, 140))}</td>`;
+      body.appendChild(tr);
     }
   }
 
-  async function openTimeline(s) {
-    const { ok, data } = await api(`/api/sessions/${s.actor_id}/timeline`);
-    if (!ok) return;
-    $('timelineBox').classList.remove('hidden');
-    $('timelineTitle').textContent = `Loopback timeline — ${s.username} (actor #${s.actor_id})`;
-    const tl = $('timeline');
-    tl.innerHTML = '';
-    for (const e of (data.timeline || []).slice().reverse()) {
-      const row = document.createElement('div');
-      row.className = 'tl-row';
-      row.innerHTML = `
-        <span class="ts">${timeOf(e.ts)}</span>
-        <span class="ep">${esc(e.method)} ${esc(e.endpoint)} → HTTP ${e.status_code}</span>
-        <span class="trace">trace ${esc(String(e.trace_id).slice(0, 8))}</span>`;
-      tl.appendChild(row);
-      for (const q of e.db_queries || []) {
-        const sql = document.createElement('div');
-        sql.className = 'tl-sql';
-        sql.textContent = `↳ SQL ${q.template || q.query}`;
-        tl.appendChild(sql);
-      }
-    }
+  /* ---------- settings ---------- */
+  async function loadSettings() {
+    const res = await api('/api/settings');
+    if (!res.ok) return;
+    const s = res.data.settings || {};
+    $('setAutoBlock').checked = !!s.auto_block_enabled;
+    $('setAutoBlockSev').value = s.auto_block_severity || 'CRITICAL';
+    $('setAutoRevoke').checked = !!s.auto_revoke_enabled;
+    $('setAutoRevokeSev').value = s.auto_revoke_severity || 'CRITICAL';
+    $('setRiskThreshold').value = Number(s.risk_threshold ?? 75);
+    $('setRiskVal').textContent = Number(s.risk_threshold ?? 75);
+    state.apiKey = res.data.apiKey;
+    $('apiKeyVal').textContent = state.apiKey || '—';
+    $('opName').textContent = `operator: ${res.data.operator || 'admin'}`;
   }
-  $('timelineClose').addEventListener('click', () => $('timelineBox').classList.add('hidden'));
 
-  /* ---------- clear ---------- */
+  $('setRiskThreshold').addEventListener('input', () => { $('setRiskVal').textContent = $('setRiskThreshold').value; });
+
+  $('setSave').addEventListener('click', async () => {
+    const res = await api('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        auto_block_enabled: $('setAutoBlock').checked,
+        auto_block_severity: $('setAutoBlockSev').value,
+        auto_revoke_enabled: $('setAutoRevoke').checked,
+        auto_revoke_severity: $('setAutoRevokeSev').value,
+        risk_threshold: Number($('setRiskThreshold').value),
+      }),
+    });
+    if (res.ok) toast('Autonomous response policy saved.');
+  });
+
+  $('apiKeyCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('apiKeyVal').textContent); toast('API key copied.'); }
+    catch { toast('Copy failed — select manually.'); }
+  });
+
+  $('apiKeyRotate').addEventListener('click', async () => {
+    const res = await api('/api/settings/apikey/rotate', { method: 'POST' });
+    if (res.ok) { state.apiKey = res.data.apiKey; $('apiKeyVal').textContent = state.apiKey; toast('API key rotated.'); }
+  });
+
   $('clearBtn').addEventListener('click', async () => {
-    if (!confirm('Clear all SOC events and alerts?')) return;
+    if (!confirm('Clear all SOC events, alerts and actions?')) return;
     await api('/api/clear', { method: 'POST' });
     refreshAll();
   });

@@ -145,6 +145,40 @@ input:focus { border-color: var(--maroon); background: #fff; }
 .profile-grid > div { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; font-weight: 600; }
 .plabel { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
 
+/* blog / careers / chat / details */
+.card-inner { background: var(--cream); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-top: 16px; }
+.inner-title { font-size: 13px; color: var(--maroon-dark); margin-bottom: 12px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.blog-list { display: flex; flex-direction: column; gap: 12px; }
+.blog-item { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--cream); cursor: pointer; transition: all .15s; }
+.blog-item:hover { border-color: var(--maroon); transform: translateY(-1px); }
+.blog-item h4 { font-size: 14.5px; color: var(--maroon-dark); margin-bottom: 5px; }
+.blog-item p { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.blog-item .bmeta { font-size: 10.5px; color: var(--muted); margin-top: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.blog-body { font-size: 13.5px; line-height: 1.75; white-space: pre-line; margin: 12px 0 4px; color: var(--ink); }
+.comments { display: flex; flex-direction: column; gap: 9px; margin-bottom: 14px; }
+.comment { background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; font-size: 12.5px; }
+.comment .cauthor { font-weight: 800; color: var(--maroon); font-size: 11.5px; margin-bottom: 3px; }
+.comment .cwhen { color: var(--muted); font-size: 10px; margin-left: 6px; }
+textarea { width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; font-size: 13.5px; font-family: inherit; background: var(--cream); color: var(--ink); outline: none; resize: vertical; }
+textarea:focus { border-color: var(--maroon); background: #fff; }
+.jobs-list { display: flex; flex-direction: column; gap: 12px; }
+.job-item { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--cream); display: flex; flex-direction: column; gap: 8px; }
+.job-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.job-item h4 { font-size: 14.5px; color: var(--maroon-dark); }
+.job-item .jdesc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.job-item .jmeta { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip-btn { border: 0; background: var(--maroon); color: #fff; border-radius: 10px; padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.chip-btn:hover { background: var(--maroon-dark); }
+.chip-btn:disabled { opacity: .55; cursor: wait; }
+.cover-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--maroon-dark); }
+.chat-log { display: flex; flex-direction: column; gap: 9px; background: var(--cream); border: 1px solid var(--line); border-radius: 16px; padding: 14px; max-height: 340px; overflow-y: auto; margin-bottom: 12px; }
+.chat-msg { max-width: 82%; padding: 10px 13px; border-radius: 13px; font-size: 12.5px; line-height: 1.55; white-space: pre-line; }
+.chat-msg.bot { background: #fff; border: 1px solid var(--line); align-self: flex-start; border-bottom-left-radius: 4px; }
+.chat-msg.me { background: var(--maroon); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.chat-input { display: flex; gap: 10px; }
+.chat-input input { flex: 1; }
+
 .key-box { margin-top: 16px; background: var(--cream); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
 .key-row { display: flex; gap: 10px; align-items: center; }
 .key-row code { flex: 1; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 12px; word-break: break-all; }

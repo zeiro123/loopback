@@ -84,6 +84,9 @@
         <button class="bank-tab" data-tab="transfer" type="button">Send Money</button>
         <button class="bank-tab" data-tab="transactions" type="button">Transactions</button>
         <button class="bank-tab" data-tab="statements" type="button">Statements</button>
+        <button class="bank-tab" data-tab="blog" type="button">Blog</button>
+        <button class="bank-tab" data-tab="careers" type="button">Careers</button>
+        <button class="bank-tab" data-tab="support" type="button">Support</button>
         <button class="bank-tab" data-tab="profile" type="button">Profile</button>
         <button class="bank-tab" data-tab="apikey" type="button">API Keys</button>
       </nav>
@@ -178,6 +181,59 @@
         </div>
       </section>
 
+      <!-- Blog -->
+      <section id="panel-blog" class="panel">
+        <div class="card">
+          <div id="blogList">
+            <h3>Apex Trust Blog</h3>
+            <p class="muted">Company news and updates — open a post to leave feedback.</p>
+            <div class="blog-list" id="blogItems"></div>
+          </div>
+          <div id="blogReader" class="hidden">
+            <button class="btn secondary" id="blogBack" type="button">← All posts</button>
+            <h3 id="blogTitle"></h3>
+            <p class="muted" id="blogMeta"></p>
+            <p id="blogBody" class="blog-body"></p>
+            <div class="card-inner">
+              <h4 class="inner-title">Client feedback</h4>
+              <div id="blogComments" class="comments"></div>
+              <form id="commentForm" class="stack">
+                <label>Add feedback
+                  <textarea id="commentBody" rows="3" placeholder="Share your thoughts…" required></textarea>
+                </label>
+                <button class="btn primary" type="submit" id="commentBtn">Post Feedback</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Careers -->
+      <section id="panel-careers" class="panel">
+        <div class="card">
+          <h3>Careers at Apex Trust</h3>
+          <p class="muted">Current openings — apply with a short cover letter.</p>
+          <div class="jobs-list" id="jobsItems"></div>
+          <div class="card-inner">
+            <h4 class="inner-title">My applications</h4>
+            <div id="myAppsList" class="mini-txns"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Support chat -->
+      <section id="panel-support" class="panel">
+        <div class="card narrow">
+          <h3>Apex Assist — Support Chat</h3>
+          <p class="muted">Ask about balances, transfers, statements or careers. Try mentioning an account number.</p>
+          <div id="chatLog" class="chat-log"><div class="chat-msg bot">Hello! I am the Apex Trust support assistant. Type "help" to see what I can do.</div></div>
+          <form id="chatForm" class="chat-input">
+            <input id="chatText" type="text" placeholder="Type a message…" autocomplete="off" />
+            <button class="btn primary" type="submit">Send</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Profile -->
       <section id="panel-profile" class="panel">
         <div class="card narrow">
@@ -187,6 +243,8 @@
             <div><span class="plabel">Username</span><span id="profileUsername">—</span></div>
             <div><span class="plabel">Client ID</span><span id="profileId">—</span></div>
             <div><span class="plabel">Registered email</span><span id="profileEmail">—</span></div>
+            <div><span class="plabel">Phone</span><span id="profilePhone">—</span></div>
+            <div><span class="plabel">Occupation</span><span id="profileOccupation">—</span></div>
           </div>
           <div id="emailBanner" class="banner hidden"></div>
           <form id="emailForm" class="stack">
@@ -197,6 +255,24 @@
               <input id="emailTargetId" type="number" />
             </label>
             <button type="submit" class="btn primary">Save Email Address</button>
+          </form>
+          <h4 class="inner-title">Update personal details</h4>
+          <form id="detailsForm" class="stack">
+            <div class="grid-2">
+              <label>Phone
+                <input id="detailPhone" type="text" placeholder="+263 …" />
+              </label>
+              <label>Occupation
+                <input id="detailOccupation" type="text" placeholder="e.g. Engineer" />
+              </label>
+            </div>
+            <label>Address
+              <input id="detailAddress" type="text" placeholder="Street, city" />
+            </label>
+            <label>Update details for client ID
+              <input id="detailTargetId" type="number" />
+            </label>
+            <button type="submit" class="btn secondary" id="detailsBtn">Save Details</button>
           </form>
         </div>
       </section>

@@ -12,61 +12,151 @@
     <div class="gate-card">
       <div class="gate-mark">◆</div>
       <h1>LOOPBACK <span>SOC</span></h1>
-      <p>Security Operations Center &bull; operator login required</p>
+      <p>Security Operations Center &bull; operator authentication</p>
       <div id="gateError" class="banner error hidden"></div>
       <form id="gateForm">
         <label>Operator username<input id="gateUser" type="text" value="admin" autocomplete="username" /></label>
         <label>Operator password<input id="gatePass" type="password" value="admin" autocomplete="current-password" /></label>
-        <button type="submit" class="btn primary">Access Console</button>
+        <button type="submit" class="btn primary" id="gateBtn">Access Console</button>
       </form>
+      <div id="gateFlow" class="gate-flow hidden"></div>
       <p class="gate-hint">Lab default: <code>admin / admin</code></p>
     </div>
   </div>
 
   <!-- ============ CONSOLE ============ -->
-  <div id="console" class="hidden">
-    <header class="soc-header">
-      <div class="soc-header-inner">
-        <div class="soc-brand">
-          <div class="soc-mark">◆</div>
-          <div>
-            <span class="soc-name">LOOPBACK <span class="soc-badge">DEFENSE CONSOLE</span></span>
-            <span class="soc-sub">Cross-layer API ↔ SQL correlation &bull; operator: admin</span>
+  <div id="console" class="shell hidden">
+    <aside class="side">
+      <div class="side-brand">
+        <div class="soc-mark">◆</div>
+        <div>
+          <span class="side-name">LOOPBACK <span class="soc-badge">SOC</span></span>
+          <span class="side-sub">Defense Console v2</span>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <button class="nav-btn active" data-tab="overview" type="button">◈ Overview</button>
+        <button class="nav-btn" data-tab="traffic" type="button">⇄ Live Traffic</button>
+        <button class="nav-btn" data-tab="users" type="button">◉ Users</button>
+        <button class="nav-btn" data-tab="alerts" type="button">⚑ Alerts <span id="alertCount" class="pill hidden">0</span></button>
+        <button class="nav-btn" data-tab="actions" type="button">⚡ Response Actions</button>
+        <button class="nav-btn" data-tab="settings" type="button">⚙ Settings</button>
+        <button class="nav-btn" data-tab="api" type="button">⌘ API</button>
+        <button class="nav-btn" data-tab="manual" type="button">☰ Manual</button>
+        <button class="nav-btn" data-tab="terms" type="button">§ Terms</button>
+      </nav>
+      <div class="side-foot">
+        <span class="mono muted" id="opName">operator: —</span>
+        <button class="btn danger small" id="logoutBtn" type="button">Exit</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- ========== OVERVIEW ========== -->
+      <section id="panel-overview" class="panel active">
+        <h2 class="panel-title">Threat overview <span class="live-tag">LIVE</span></h2>
+        <div class="stat-grid">
+          <div class="stat"><span class="v" id="stApi">0</span><span class="l">API events</span></div>
+          <div class="stat"><span class="v" id="stDb">0</span><span class="l">SQL events</span></div>
+          <div class="stat"><span class="v" id="stAlerts">0</span><span class="l">Alerts</span></div>
+          <div class="stat alert"><span class="v" id="stCritical">0</span><span class="l">High / critical</span></div>
+          <div class="stat"><span class="v" id="stActors">0</span><span class="l">Tracked users</span></div>
+          <div class="stat"><span class="v" id="stBlocked">0</span><span class="l">Blocks (24h)</span></div>
+          <div class="stat ai"><span class="v" id="stAuto">0</span><span class="l">Autonomous actions</span></div>
+          <div class="stat ai"><span class="v" id="stRisk">0</span><span class="l">Avg risk score</span></div>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <h3>Alerts by severity</h3>
+            <div id="sevBars" class="sev-bars"></div>
+          </div>
+          <div class="card">
+            <h3>Risk leaderboard <span class="ai-tag">risk engine</span></h3>
+            <div id="riskBoard" class="risk-board"></div>
           </div>
         </div>
-        <div class="soc-actions">
-          <a class="btn ghost" href="http://localhost:5000" target="_blank" rel="noreferrer">Banking App ↗</a>
-          <button class="btn ghost" id="clearBtn" type="button">Clear Store</button>
-          <button class="btn danger" id="logoutBtn" type="button">Exit</button>
+        <div class="two-col">
+          <div class="card">
+            <h3>Latest alerts</h3>
+            <div id="recentAlerts" class="mini-list"></div>
+          </div>
+          <div class="card">
+            <h3>Latest response actions</h3>
+            <div id="recentActions" class="mini-list"></div>
+          </div>
         </div>
-      </div>
-      <div class="soc-stats">
-        <div class="soc-stat"><span class="v" id="stApi">0</span><span class="l">API events</span></div>
-        <div class="soc-stat"><span class="v" id="stDb">0</span><span class="l">SQL events</span></div>
-        <div class="soc-stat"><span class="v" id="stAlerts">0</span><span class="l">Alerts</span></div>
-        <div class="soc-stat alert"><span class="v" id="stCritical">0</span><span class="l">High / critical</span></div>
-        <div class="soc-stat"><span class="v" id="stActors">0</span><span class="l">Active actors</span></div>
-      </div>
-      <nav class="soc-tabs">
-        <button class="soc-tab active" data-tab="traffic" type="button">Live Traffic</button>
-        <button class="soc-tab" data-tab="alerts" type="button">Security Alerts <span id="alertCount" class="pill hidden">0</span></button>
-        <button class="soc-tab" data-tab="sessions" type="button">Sessions</button>
-      </nav>
-    </header>
+      </section>
 
-    <main class="soc-main">
-      <!-- Live Traffic -->
-      <section id="panel-traffic" class="panel active">
+      <!-- ========== LIVE TRAFFIC ========== -->
+      <section id="panel-traffic" class="panel">
         <div class="traffic-head">
           <div class="pulse-dot"></div>
           <span class="traffic-title">Continuous REST + GraphQL stream — every request bound to the SQL it produced</span>
           <span class="muted mono">/var/log/loopback/events.log</span>
         </div>
+        <div class="filter-row">
+          <select id="fApi" class="sel"><option value="">All APIs</option><option value="rest">REST</option><option value="graphql">GraphQL</option></select>
+          <input id="fUser" class="inp" placeholder="Filter by user…" />
+          <input id="fEp" class="inp" placeholder="Filter by endpoint…" />
+        </div>
         <div class="traffic-scroll" id="trafficStream"></div>
       </section>
 
-      <!-- Alerts -->
+      <!-- ========== USERS ========== -->
+      <section id="panel-users" class="panel">
+        <p class="panel-hint">Every tracked actor: client ID, IPs, devices, activity volume, alerts and live risk score. Click a user for the full investigation view.</p>
+        <div class="table-wrap card-flat">
+          <table class="grid-table">
+            <thead><tr>
+              <th>ID</th><th>User</th><th>IPs</th><th>Requests</th><th>Endpoints</th><th>Errors</th><th>Alerts</th><th>Risk</th><th>Status</th><th>Last seen</th><th></th>
+            </tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+        <div id="userDetail" class="hidden">
+          <div class="detail-head">
+            <h3 id="udTitle">User</h3>
+            <button class="btn ghost" id="udClose" type="button">Close</button>
+          </div>
+          <div class="two-col">
+            <div class="card" id="udProfile"></div>
+            <div class="card">
+              <h3>Risk breakdown <span class="ai-tag">lightweight model</span></h3>
+              <div id="udRisk"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="detail-head">
+              <h3>Response actions</h3>
+              <div class="btn-row">
+                <button class="btn danger" id="udBlock" type="button">Block User</button>
+                <button class="btn warn" id="udRevoke" type="button">Revoke Session</button>
+                <button class="btn ghost" id="udUnblock" type="button">Unblock</button>
+              </div>
+            </div>
+            <div id="udActions" class="mini-list"></div>
+          </div>
+          <div class="card">
+            <h3>Activity log — everything this user did</h3>
+            <div id="udActivity" class="timeline"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ALERTS ========== -->
       <section id="panel-alerts" class="panel">
+        <div class="filter-row" id="alertFilters">
+          <span class="fchip active" data-sev="">ALL</span>
+          <span class="fchip sev-CRITICAL" data-sev="CRITICAL">CRITICAL</span>
+          <span class="fchip sev-HIGH" data-sev="HIGH">HIGH</span>
+          <span class="fchip sev-MEDIUM" data-sev="MEDIUM">MEDIUM</span>
+          <span class="fchip sev-INFO" data-sev="INFO">INFO</span>
+          <span class="sep"></span>
+          <span class="fchip" data-type="">All types</span>
+          <span class="fchip" data-type="POSSIBLE_IDOR_ATTACK">IDOR</span>
+          <span class="fchip" data-type="POSSIBLE_BUSINESS_LOGIC_ATTACK">BUSINESS LOGIC</span>
+          <span class="fchip" data-type="RESOURCE_ENUMERATION_ATTACK">ENUMERATION</span>
+        </div>
         <div id="alertsEmpty" class="empty-state hidden">
           <div class="empty-mark">✓</div>
           <h3>No threat alerts triggered</h3>
@@ -75,16 +165,109 @@
         <div id="alertsList" class="alerts-list"></div>
       </section>
 
-      <!-- Sessions -->
-      <section id="panel-sessions" class="panel">
-        <p class="panel-hint">Session aggregates over the last 60 minutes — click an actor to open its loopback timeline (request → SQL chain).</p>
-        <div id="sessionsList" class="sessions-list"></div>
-        <div id="timelineBox" class="timeline-box hidden">
-          <div class="timeline-head">
-            <h3 id="timelineTitle">Timeline</h3>
-            <button class="btn ghost" id="timelineClose" type="button">Close</button>
+      <!-- ========== ACTIONS ========== -->
+      <section id="panel-actions" class="panel">
+        <p class="panel-hint">Every response action — manual (operator) and autonomous (risk engine) — with its reason and trigger.</p>
+        <div class="filter-row">
+          <span class="fchip active" data-src="">ALL</span>
+          <span class="fchip" data-src="manual">MANUAL</span>
+          <span class="fchip" data-src="autonomous">AUTONOMOUS</span>
+        </div>
+        <div class="table-wrap card-flat">
+          <table class="grid-table">
+            <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Source</th><th>Operator</th><th>Reason</th></tr></thead>
+            <tbody id="actionsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ========== SETTINGS ========== -->
+      <section id="panel-settings" class="panel">
+        <div class="card narrow">
+          <h3>Autonomous response policy</h3>
+          <p class="muted">When an alert or the risk engine crosses a threshold, the SOC acts on its own: blocks the user and revokes their live sessions on the target. Every autonomous action is logged in Response Actions.</p>
+          <div class="set-row">
+            <label class="switch-label"><input type="checkbox" id="setAutoBlock" /> Auto-block user</label>
+            <select id="setAutoBlockSev" class="sel"><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select>
           </div>
-          <div id="timeline" class="timeline"></div>
+          <div class="set-row">
+            <label class="switch-label"><input type="checkbox" id="setAutoRevoke" /> Auto-revoke sessions</label>
+            <select id="setAutoRevokeSev" class="sel"><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select>
+          </div>
+          <div class="set-row col">
+            <label>Risk-engine threshold (0–100): <strong id="setRiskVal">75</strong></label>
+            <input type="range" id="setRiskThreshold" min="0" max="100" step="5" value="75" />
+            <span class="muted fine">The lightweight statistical model scores every tracked user. Above this threshold the SOC blocks them autonomously.</span>
+          </div>
+          <button class="btn primary" id="setSave" type="button">Save Policy</button>
+        </div>
+        <div class="card narrow">
+          <h3>SOC API key</h3>
+          <p class="muted">Programmatic access to the SOC REST + GraphQL read API (header <code>X-API-Key</code>).</p>
+          <div class="key-row"><code id="apiKeyVal">—</code><button class="btn ghost" id="apiKeyCopy" type="button">Copy</button><button class="btn warn" id="apiKeyRotate" type="button">Rotate</button></div>
+        </div>
+        <div class="card narrow">
+          <h3>Store</h3>
+          <button class="btn danger" id="clearBtn" type="button">Clear all SOC events, alerts and actions</button>
+        </div>
+      </section>
+
+      <!-- ========== API ========== -->
+      <section id="panel-api" class="panel">
+        <div class="card">
+          <h3>SOC REST API</h3>
+          <p class="muted">Authenticate with the operator token (Authorization: Bearer) or the API key (X-API-Key).</p>
+          <table class="grid-table">
+            <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>POST</td><td class="mono">/api/login</td><td>Operator login → token</td></tr>
+              <tr><td>GET</td><td class="mono">/api/stats</td><td>Live counters + severity breakdown</td></tr>
+              <tr><td>GET</td><td class="mono">/api/events?limit=100</td><td>Merged REST + GraphQL event stream with SQL pairs</td></tr>
+              <tr><td>GET</td><td class="mono">/api/alerts</td><td>All alerts with attack paths + evidence</td></tr>
+              <tr><td>GET</td><td class="mono">/api/users</td><td>Every tracked user: IDs, IPs, devices, risk</td></tr>
+              <tr><td>GET</td><td class="mono">/api/users/:id</td><td>Full investigation view for one actor</td></tr>
+              <tr><td>GET</td><td class="mono">/api/actions</td><td>Response action log (manual + autonomous)</td></tr>
+              <tr><td>POST</td><td class="mono">/api/actions</td><td>Apply a response action (block_user / revoke_session / dismiss_alert)</td></tr>
+              <tr><td>GET/PUT</td><td class="mono">/api/settings</td><td>Autonomous response policy</td></tr>
+              <tr><td>POST</td><td class="mono">/ingest</td><td>Target pushes api_events + db_events here</td></tr>
+            </tbody>
+          </table>
+          <h4 class="inner-title">GraphQL (read-only)</h4>
+          <p class="muted">POST /graphql — <code>{ stats { apiEvents alerts } alerts(limit: 5) { severity title } users { username risk riskLevel } actions(source: "autonomous") { kind reason } }</code></p>
+          <h4 class="inner-title">Ingest contract</h4>
+          <p class="muted mono small">POST /ingest { "events": [ { "kind": "api"|"db", "traceId": "…", "actorId": 1, "username": "Mary", "method": "GET", "endpoint": "/api/…", "statusCode": 200, "ip": "…", "userAgent": "…", "api": "rest"|"graphql", "operation": null, "params": {}, "resourceOwner": {"userId":2}, "meta": {} } ] }</p>
+        </div>
+      </section>
+
+      <!-- ========== MANUAL ========== -->
+      <section id="panel-manual" class="panel">
+        <div class="card">
+          <h3>SOC operator manual</h3>
+          <ol class="manual-list">
+            <li><strong>Overview</strong> — live threat posture: counters, severity distribution, risk leaderboard, latest alerts and actions. Auto-refreshes every 2.5 s.</li>
+            <li><strong>Live Traffic</strong> — every REST + GraphQL request the bank processed, paired with the SQL it produced (trace join). Filter by API, user or endpoint.</li>
+            <li><strong>Users</strong> — every tracked actor with client ID, IPs, devices, request volume, errors, alerts and the live risk score. Click one to open the investigation view: risk breakdown with feature contributions, full activity log, response actions.</li>
+            <li><strong>Alerts</strong> — filter by severity and attack type. Each alert carries the detailed attack path (device → session → API → SQL → tables → impact) and raw evidence. Respond directly: Block User, Revoke Session, or Dismiss.</li>
+            <li><strong>Response Actions</strong> — the full audit of every action, manual or autonomous, with the reason that drove it.</li>
+            <li><strong>Settings</strong> — configure the autonomous response policy: severity thresholds and the risk-engine threshold. Rotate the SOC API key.</li>
+            <li><strong>Blocking</strong> — a blocked user loses all live sessions immediately, cannot sign in again, and receives HTTP 403 on every bank API call. Sessions revoked individually die instantly too.</li>
+            <li><strong>Triggering detections</strong> — from the bank on :5000: swap account numbers on statements/API keys (IDOR), submit negative or oversized transfers (business logic), sweep several accounts fast (enumeration). Each alert shows how the data traversed from the user's device to the database.</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ========== TERMS ========== -->
+      <section id="panel-terms" class="panel">
+        <div class="card">
+          <h3>Terms of use &amp; license</h3>
+          <p class="muted">Loopback is a capstone security research artefact (Apache-2.0 — see LICENSE in the repository).</p>
+          <div class="terms">
+            <p><strong>1. Synthetic data only.</strong> Every account, transaction, job application and chat message in this lab is synthetic. No real personal data, no real financial institution.</p>
+            <p><strong>2. Isolated use.</strong> The vulnerable target and the SOC are for local, isolated lab use. Do not deploy publicly and never point these tools at systems you do not own or have written authorization to test.</p>
+            <p><strong>3. Deliberate vulnerabilities.</strong> The bank intentionally contains BOLA/IDOR, business-logic and enumeration flaws for detection research. Its credentials (Mary/peter, admin/admin) are printed in the documentation and are not secrets.</p>
+            <p><strong>4. Autonomous actions.</strong> The SOC can autonomously block users and revoke sessions according to the configured policy. In this lab those actions only affect the synthetic target.</p>
+            <p><strong>5. No warranty.</strong> Provided "as is" under the Apache License, Version 2.0 — see the LICENSE file for the full terms and conditions.</p>
+          </div>
         </div>
       </section>
     </main>
@@ -95,13 +278,13 @@
     <div class="modal-card">
       <div class="modal-head">
         <div>
-          <span class="modal-tag">ATTACK PATH</span>
+          <span class="modal-tag">ATTACK PATH — DATA TRAVERSAL</span>
           <h3 id="pathTitle">—</h3>
           <span class="muted mono" id="pathSub">—</span>
         </div>
         <button class="modal-close" id="pathClose" type="button">✕</button>
       </div>
-      <div class="path-grid" id="pathNodes"></div>
+      <div id="pathGraph" class="path-graph"></div>
       <h4 class="section-label">Attack sequence</h4>
       <div id="pathSteps" class="path-steps"></div>
     </div>
@@ -121,6 +304,7 @@
     </div>
   </div>
 
+  <div id="toast" class="toast hidden"></div>
   <script src="/app.js"></script>
 </body>
 </html>

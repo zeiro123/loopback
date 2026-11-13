@@ -3,7 +3,7 @@
 **Cross-Layer Correlation Framework for Detecting Multi-Step Attacks in API-Driven Applications**
 Testimony Chimberengwa R236592N · BSc Honors Computer Engineering · University of Zimbabwe · Supervisor: Mr Makate
 
-> Status as of 12 Nov 2026 — the core system is **built, containerized, and verified**. Phases 0–3 complete; remaining work is evaluation + the AI comparative classifier (dissertation phases).
+> Status as of 12 Nov 2026 — the core system is **built, containerized, and verified**, now at v2 scope: the target is a full-featured vulnerable bank (blog + feedback, careers + applications, support chatbot, personal-details management) and the SOC is a comprehensive detection + response app (user tracking, manual + autonomous response actions, explainable risk engine, detailed attack-path graphs, dynamic dashboard). Remaining work: 4-config evaluation switch + the sub-2B LLM comparative classifier.
 
 ---
 
@@ -46,13 +46,13 @@ Correlation flow (verified end-to-end):
 | Phase | Weeks | Status |
 | :--- | :--- | :--- |
 | 0. Foundations — rename to Loopback, PostgreSQL migration | — | ✅ done (12 Nov) |
-| 1. Standalone containerized target (REST + GraphQL, realistic bank, 500 ZWL seeds) | 3–4 | ✅ done |
-| 2. Trace-injection middleware + SQL comment tagging + event collection | 5–6 | ✅ done (in-process ingest instead of log tailing — simpler, no gaps; statement-log tailing kept as future work) |
-| 3. Correlation engine + session-sequence layer | 7–8 | ✅ done (Node in the SOC; a standalone Python engine remains an option for the dissertation — port `correlate.js` if required) |
+| 1. Standalone containerized target (REST + GraphQL, realistic bank, 500 ZWL seeds) | 3–4 | ✅ done — **v2**: + blog/feedback, careers/applications, support chatbot, personal-details management |
+| 2. Trace-injection middleware + SQL comment tagging + event collection | 5–6 | ✅ done (in-process ingest; statement-log tailing kept as future work) |
+| 3. Correlation engine + session-sequence layer | 7–8 | ✅ done (Node in the SOC; a standalone Python engine remains an option for the dissertation) |
 | 4. Sequence + detection layer (rule-based, 4 configs) | 9–11 | ◐ rule-based detection done; the 4-config switch (api-only / db-only / correlation-only / full) still to add |
 | 5. Evaluation harness (traffic generator, P/R/F1/FPR + latency) | 12–13 | ⬜ next |
-| 6. SOC console + local-context validation | 14 | ◐ console done (live traffic, alerts, attack paths, sessions); local-context scenario pack to polish |
-| 7. Lightweight AI classifier (sub-2B, comparative) | 9–11 | ⬜ needs labelled dataset from Phase 5 |
+| 6. SOC console + local-context validation | 14 | ✅ **v2 done**: 9-tab console (overview dashboard, live traffic, user tracking + investigations, alerts with SVG attack paths, response actions, settings, API, manual, terms), manual + autonomous response, explainable risk engine, operator-audited login. Local-context scenario pack to polish |
+| 7. Lightweight AI classifier (sub-2B, comparative) | 9–11 | ◐ lightweight statistical risk engine shipped as the explainable proof-of-concept baseline; the sub-2B LLM classifier needs the labelled dataset from Phase 5 |
 | 8. Write-up + defence demo | 15–16 | ⬜ `docker compose up --build -d` one-command demo ready |
 
 ## 5. Next actions (in order)

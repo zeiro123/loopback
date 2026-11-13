@@ -8,6 +8,7 @@
     user: null,
     account: null,
     transactions: [],
+    convoId: null,
   };
 
   /* ---------- helpers ---------- */
@@ -46,12 +47,17 @@
     state.user = null;
     state.account = null;
     state.transactions = [];
+    state.convoId = null;
     sessionStorage.removeItem(TOKEN_KEY);
     $('appView').classList.add('hidden');
     $('authView').classList.remove('hidden');
   }
 
   function saveSession() { sessionStorage.setItem(TOKEN_KEY, state.token); }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
 
   /* ---------- auth forms ---------- */
   $('tabLogin').addEventListener('click', () => switchAuth('login'));
@@ -142,8 +148,14 @@
     $('profileUsername').textContent = state.user.username;
     $('profileId').textContent = `#${state.user.id}`;
     $('profileEmail').textContent = state.user.email || '—';
+    $('profilePhone').textContent = state.user.phone || '—';
+    $('profileOccupation').textContent = state.user.occupation || '—';
     $('emailNew').value = state.user.email || '';
     $('emailTargetId').value = state.user.id;
+    $('detailTargetId').value = state.user.id;
+    $('detailPhone').value = state.user.phone || '';
+    $('detailOccupation').value = state.user.occupation || '';
+    $('detailAddress').value = state.user.address || '';
     $('keyUserId').value = state.user.id;
     $('stmtAccount').value = state.account?.accountNumber || '';
     $('txnAccount').value = state.account?.accountNumber || '';
@@ -161,36 +173,29 @@
     $('statType').textContent = state.account.type || 'CHECKING';
   }
 
-  /* ---------- tabs ---------- */
+  /* ---------- tabs (lazy-load content panels) ---------- */
   document.querySelectorAll('.bank-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.bank-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
       $(`panel-${tab.dataset.tab}`).classList.add('active');
+      const which = tab.dataset.tab;
+      if (which === 'blog' && !$('blogItems').children.length) loadBlog();
+      if (which === 'careers' && !$('jobsItems').children.length) loadCareers();
     });
   });
 
   /* ---------- transactions ---------- */
-  async function loadTransactions(accountNumber, { silent = false, bannerId = 'txnBanner' } = {}) {
-    if (!accountNumber) return;
-    try {
-      const { ok, data } = await api(`/api/accounts/${encodeURIComponent(accountNumber)}/transactions`);
-      if (!ok || !data.success) {
-        if (!silent) showBanner(bannerId, 'error', data.error || 'Failed to load transactions.');
-        return;
-      }
-      hideBanner(bannerId);
-      if (silent || accountNumber === state.account?.accountNumber) {
-        state.transactions = data.transactions || [];
-        $('statTxCount').textContent = state.transactions.length;
-        renderBalance();
-        renderRecent();
-      }
-      renderMainTxns(data);
-    } catch (err) {
-      if (!silent) showBanner(bannerId, 'error', 'Network error.');
-    }
+  function txnRow(t) {
+    const inAmount = t.type === 'DEPOSIT';
+    const when = new Date(t.created_at || t.createdAt).toLocaleString();
+    return `
+      <td>${when}</td>
+      <td><span class="type-badge type-${t.type}">${t.type}</span></td>
+      <td>${escapeHtml(t.description || '')}</td>
+      <td>${escapeHtml(t.to_account_number || '')}</td>
+      <td class="right ${inAmount ? 'amount-in' : 'amount-out'}">${inAmount ? '+' : '−'}${zwl(t.amount).replace('ZWL ', '')}</td>`;
   }
 
   function renderMainTxns(data) {
@@ -203,14 +208,7 @@
     }
     for (const t of txns) {
       const tr = document.createElement('tr');
-      const inAmount = t.type === 'DEPOSIT';
-      const when = new Date(t.created_at).toLocaleString();
-      tr.innerHTML = `
-        <td>${when}</td>
-        <td><span class="type-badge type-${t.type}">${t.type}</span></td>
-        <td>${escapeHtml(t.description || '')}</td>
-        <td>${escapeHtml(t.to_account_number || '')}</td>
-        <td class="right ${inAmount ? 'amount-in' : 'amount-out'}">${inAmount ? '+' : '−'}${zwl(t.amount).replace('ZWL ', '')}</td>`;
+      tr.innerHTML = txnRow(t);
       body.appendChild(tr);
     }
   }
@@ -231,6 +229,27 @@
         <span><strong>${inAmount ? '+' : '−'}${zwl(t.amount).replace('ZWL ', '')}</strong> <span class="when">• ${escapeHtml(t.description || t.type)}</span></span>
         <span class="when">${new Date(t.created_at).toLocaleDateString()}</span>`;
       wrap.appendChild(el);
+    }
+  }
+
+  async function loadTransactions(accountNumber, { silent = false, bannerId = 'txnBanner' } = {}) {
+    if (!accountNumber) return;
+    try {
+      const { ok, data } = await api(`/api/accounts/${encodeURIComponent(accountNumber)}/transactions`);
+      if (!ok || !data.success) {
+        if (!silent) showBanner(bannerId, 'error', data.error || 'Failed to load transactions.');
+        return;
+      }
+      hideBanner(bannerId);
+      if (silent || accountNumber === state.account?.accountNumber) {
+        state.transactions = data.transactions || [];
+        $('statTxCount').textContent = state.transactions.length;
+        renderBalance();
+        renderRecent();
+      }
+      renderMainTxns(data);
+    } catch (err) {
+      if (!silent) showBanner(bannerId, 'error', 'Network error.');
     }
   }
 
@@ -316,7 +335,199 @@
     }
   });
 
-  /* ---------- profile / email ---------- */
+  /* ---------- blog ---------- */
+  async function loadBlog() {
+    const wrap = $('blogItems');
+    wrap.innerHTML = '<div class="mini-txn"><span class="when">Loading posts…</span></div>';
+    try {
+      const { ok, data } = await api('/api/blog/posts');
+      if (!ok || !data.success) { wrap.innerHTML = '<div class="mini-txn"><span class="when">Failed to load posts.</span></div>'; return; }
+      wrap.innerHTML = '';
+      for (const p of data.posts) {
+        const el = document.createElement('div');
+        el.className = 'blog-item';
+        el.innerHTML = `
+          <h4>${escapeHtml(p.title)}</h4>
+          <p>${escapeHtml(p.excerpt || '')}</p>
+          <span class="bmeta">${escapeHtml(p.author_name || '')} • ${new Date(p.published_at).toLocaleDateString()} • ${p.comment_count} feedback</span>`;
+        el.addEventListener('click', () => openBlogPost(p.id));
+        wrap.appendChild(el);
+      }
+    } catch (err) {
+      wrap.innerHTML = '<div class="mini-txn"><span class="when">Network error.</span></div>';
+    }
+  }
+
+  async function openBlogPost(id) {
+    try {
+      const { ok, data } = await api(`/api/blog/posts/${id}`);
+      if (!ok || !data.success) return;
+      state.blogPostId = id;
+      $('blogList').classList.add('hidden');
+      $('blogReader').classList.remove('hidden');
+      $('blogTitle').textContent = data.post.title;
+      $('blogMeta').textContent = `${data.post.author_name || 'Apex Trust'} • ${new Date(data.post.published_at).toLocaleDateString()}`;
+      $('blogBody').textContent = data.post.body || '';
+      renderComments(data.comments || []);
+    } catch (err) { /* ignore */ }
+  }
+
+  function renderComments(comments) {
+    const wrap = $('blogComments');
+    wrap.innerHTML = '';
+    if (!comments.length) {
+      wrap.innerHTML = '<div class="comment"><span class="muted">No feedback yet — be the first.</span></div>';
+      return;
+    }
+    for (const c of comments) {
+      const el = document.createElement('div');
+      el.className = 'comment';
+      el.innerHTML = `<div class="cauthor">${escapeHtml(c.author_name || 'Guest')}<span class="cwhen">${new Date(c.created_at).toLocaleString()}</span></div>${escapeHtml(c.body)}`;
+      wrap.appendChild(el);
+    }
+  }
+
+  $('blogBack').addEventListener('click', () => {
+    $('blogReader').classList.add('hidden');
+    $('blogList').classList.remove('hidden');
+    loadBlog();
+  });
+
+  $('commentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = $('commentBody').value.trim();
+    if (!body || !$('blogTitle').textContent) return;
+    const btn = $('commentBtn');
+    btn.disabled = true;
+    try {
+      // read the current post id from state (set when opened)
+      const { ok, data } = await api(`/api/blog/posts/${state.blogPostId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      });
+      if (ok && data.success) {
+        $('commentBody').value = '';
+        const { ok: ok2, data: data2 } = await api(`/api/blog/posts/${state.blogPostId}`);
+        if (ok2 && data2.success) renderComments(data2.comments || []);
+        toast('Feedback posted.');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /* ---------- careers ---------- */
+  async function loadCareers() {
+    const wrap = $('jobsItems');
+    wrap.innerHTML = '<div class="mini-txn"><span class="when">Loading openings…</span></div>';
+    try {
+      const [jobsRes, appsRes] = await Promise.all([api('/api/jobs'), api('/api/applications/mine')]);
+      wrap.innerHTML = '';
+      if (!jobsRes.ok || !jobsRes.data.success) {
+        wrap.innerHTML = '<div class="mini-txn"><span class="when">Sign in to view and apply for openings.</span></div>';
+        return;
+      }
+      for (const j of jobsRes.data.jobs) {
+        const el = document.createElement('div');
+        el.className = 'job-item';
+        el.innerHTML = `
+          <div class="job-top">
+            <div>
+              <h4>${escapeHtml(j.title)}</h4>
+              <span class="jmeta">
+                <span class="chip subtle">${escapeHtml(j.department || '')}</span>
+                <span class="chip subtle">${escapeHtml(j.location || '')}</span>
+                <span class="chip subtle">${escapeHtml(j.employment_type || '')}</span>
+                <span class="chip">ZWL ${Number(j.salary_min).toLocaleString()} – ${Number(j.salary_max).toLocaleString()}</span>
+              </span>
+            </div>
+            <button class="chip-btn" data-job="${j.id}" type="button">Apply</button>
+          </div>
+          <p class="jdesc">${escapeHtml(j.description || '')}</p>
+          <div class="cover-label">Cover letter
+            <textarea rows="2" placeholder="Why you? (optional)" id="cover-${j.id}"></textarea>
+          </div>`;
+        el.querySelector('.chip-btn').addEventListener('click', (e) => applyJob(j.id, e.target));
+        wrap.appendChild(el);
+      }
+      renderMyApps(appsRes.ok && appsRes.data.success ? appsRes.data.applications : []);
+    } catch (err) {
+      wrap.innerHTML = '<div class="mini-txn"><span class="when">Network error.</span></div>';
+    }
+  }
+
+  async function applyJob(jobId, btn) {
+    const cover = $(`cover-${jobId}`)?.value?.trim();
+    btn.disabled = true;
+    try {
+      const { ok, data } = await api(`/api/jobs/${jobId}/apply`, {
+        method: 'POST',
+        body: JSON.stringify({ coverLetter: cover || undefined }),
+      });
+      if (ok && data.success) {
+        toast(data.message);
+        const apps = await api('/api/applications/mine');
+        if (apps.ok && apps.data.success) renderMyApps(apps.data.applications);
+      } else {
+        toast(data.error || 'Application failed — sign in first.');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderMyApps(apps) {
+    const wrap = $('myAppsList');
+    wrap.innerHTML = '';
+    if (!state.token) {
+      wrap.innerHTML = '<div class="mini-txn"><span class="when">Sign in to track your applications.</span></div>';
+      return;
+    }
+    if (!apps.length) {
+      wrap.innerHTML = '<div class="mini-txn"><span class="when">No applications yet — apply above.</span></div>';
+      return;
+    }
+    for (const a of apps) {
+      const el = document.createElement('div');
+      el.className = 'mini-txn';
+      el.innerHTML = `<span><strong>${escapeHtml(a.job_title)}</strong> <span class="when">• ${escapeHtml(a.status)}</span></span><span class="when">${new Date(a.created_at).toLocaleDateString()}</span>`;
+      wrap.appendChild(el);
+    }
+  }
+
+  /* ---------- support chat ---------- */
+  function chatAppend(role, text) {
+    const log = $('chatLog');
+    const el = document.createElement('div');
+    el.className = `chat-msg ${role === 'user' ? 'me' : 'bot'}`;
+    el.textContent = text;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  $('chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = $('chatText').value.trim();
+    if (!text) return;
+    chatAppend('user', text);
+    $('chatText').value = '';
+    try {
+      const { ok, data } = await api('/api/support/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: text, convoId: state.convoId || undefined }),
+      });
+      if (ok && data.success) {
+        state.convoId = data.convoId;
+        chatAppend('bot', data.reply);
+      } else {
+        chatAppend('bot', 'The assistant is unavailable right now.');
+      }
+    } catch (err) {
+      chatAppend('bot', 'Network error.');
+    }
+  });
+
+  /* ---------- profile / email / details ---------- */
   $('emailForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     hideBanner('emailBanner');
@@ -340,6 +551,39 @@
     }
   });
 
+  $('detailsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideBanner('emailBanner');
+    const btn = $('detailsBtn');
+    btn.disabled = true;
+    try {
+      const targetId = $('detailTargetId').value.trim() || state.user.id;
+      const { ok, data } = await api(`/api/users/${targetId}/details`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          phone: $('detailPhone').value.trim() || undefined,
+          occupation: $('detailOccupation').value.trim() || undefined,
+          address: $('detailAddress').value.trim() || undefined,
+        }),
+      });
+      if (!ok || !data.success) {
+        showBanner('emailBanner', 'error', data.error || 'Details update failed.');
+        return;
+      }
+      showBanner('emailBanner', 'success', data.message);
+      if (Number(targetId) === state.user.id) {
+        state.user = { ...state.user, ...data.user };
+        $('profilePhone').textContent = data.user.phone || '—';
+        $('profileOccupation').textContent = data.user.occupation || '—';
+      }
+      toast(data.message);
+    } catch (err) {
+      showBanner('emailBanner', 'error', 'Network error.');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   /* ---------- API keys ---------- */
   $('keyLoad').addEventListener('click', async () => {
     hideBanner('keyBanner');
@@ -354,9 +598,7 @@
       hideBanner('keyBanner');
       $('keyBox').classList.remove('hidden');
       $('keyValue').textContent = data.apiKey;
-      if (Number(id) === state.user.id) {
-        state.user.apiKey = data.apiKey;
-      }
+      if (Number(id) === state.user.id) state.user.apiKey = data.apiKey;
     } catch (err) {
       showBanner('keyBanner', 'error', 'Network error.');
     }
@@ -381,8 +623,4 @@
       clearSession();
     }
   })();
-
-  function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
 })();

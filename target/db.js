@@ -51,8 +51,12 @@ export async function ensureSchema() {
       password TEXT NOT NULL,
       api_key TEXT UNIQUE NOT NULL,
       address TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      occupation TEXT DEFAULT '',
       created_at TIMESTAMPTZ DEFAULT now()
     )`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation TEXT DEFAULT ''`,
     `CREATE TABLE IF NOT EXISTS accounts (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id),
@@ -77,11 +81,70 @@ export async function ensureSchema() {
       user_id INTEGER NOT NULL REFERENCES users(id),
       created_at TIMESTAMPTZ DEFAULT now()
     )`,
+    // ---- company blog ----
+    `CREATE TABLE IF NOT EXISTS blog_posts (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      excerpt TEXT,
+      body TEXT,
+      author_name TEXT,
+      published_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS blog_comments (
+      id SERIAL PRIMARY KEY,
+      post_id INTEGER NOT NULL REFERENCES blog_posts(id),
+      user_id INTEGER,
+      author_name TEXT,
+      body TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    // ---- careers ----
+    `CREATE TABLE IF NOT EXISTS jobs (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      department TEXT,
+      location TEXT,
+      employment_type TEXT,
+      description TEXT,
+      salary_min NUMERIC(12,2),
+      salary_max NUMERIC(12,2),
+      open BOOLEAN DEFAULT true,
+      posted_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS job_applications (
+      id SERIAL PRIMARY KEY,
+      job_id INTEGER NOT NULL REFERENCES jobs(id),
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      cover_letter TEXT,
+      status TEXT DEFAULT 'SUBMITTED',
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    // ---- support chat ----
+    `CREATE TABLE IF NOT EXISTS support_messages (
+      id SERIAL PRIMARY KEY,
+      convo_id TEXT NOT NULL,
+      user_id INTEGER,
+      role TEXT NOT NULL,
+      text TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    // ---- SOC control plane (blocklists / revocations applied by the SOC) ----
+    `CREATE TABLE IF NOT EXISTS soc_controls (
+      id SERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      value TEXT NOT NULL,
+      reason TEXT,
+      source TEXT DEFAULT 'manual',
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS soc_controls_kind_idx ON soc_controls (kind, value, active)`,
   ];
-  // Retry while the compose db container finishes booting.
   for (let attempt = 1; attempt <= 25; attempt++) {
     try {
       for (const stmt of ddl) await pool.query(stmt);
+      await seedContent();
       return;
     } catch (err) {
       if (attempt === 25) throw err;
@@ -96,11 +159,46 @@ export async function ensureSchema() {
    ========================================================================== */
 
 const SEED_USERS = [
-  { username: 'Mary',  name: 'Mary Jane',  email: 'mary.jane@apexbank.test',  password: 'peter', address: '14 Samora Machel Avenue, Harare, Zimbabwe' },
-  { username: 'John',  name: 'John Doe',   email: 'john.doe@apexbank.test',   password: 'peter', address: '82 Herbert Chitepo Street, Mutare, Zimbabwe' },
-  { username: 'Alice', name: 'Alice Smith',email: 'alice.smith@apexbank.test',password: 'peter', address: '45 Joshua Nkomo Street, Bulawayo, Zimbabwe' },
-  { username: 'Bob',   name: 'Bob Vance',  email: 'bob.vance@apexbank.test',  password: 'peter', address: '12 Robert Mugabe Way, Gweru, Zimbabwe' },
+  { username: 'Mary',  name: 'Mary Jane',  email: 'mary.jane@apexbank.test',  password: 'peter', address: '14 Samora Machel Avenue, Harare, Zimbabwe', phone: '+263 771 002 100', occupation: 'Retailer' },
+  { username: 'John',  name: 'John Doe',   email: 'john.doe@apexbank.test',   password: 'peter', address: '82 Herbert Chitepo Street, Mutare, Zimbabwe', phone: '+263 772 003 200', occupation: 'Teacher' },
+  { username: 'Alice', name: 'Alice Smith',email: 'alice.smith@apexbank.test',password: 'peter', address: '45 Joshua Nkomo Street, Bulawayo, Zimbabwe', phone: '+263 773 004 300', occupation: 'Engineer' },
+  { username: 'Bob',   name: 'Bob Vance',  email: 'bob.vance@apexbank.test',  password: 'peter', address: '12 Robert Mugabe Way, Gweru, Zimbabwe', phone: '+263 774 005 400', occupation: 'Farmer' },
 ];
+
+const SEED_POSTS = [
+  { title: 'Apex Trust Bank launches instant ZWL transfers', slug: 'instant-zwl-transfers', excerpt: 'Move money between client accounts in seconds — no queues, no paperwork.', body: 'Today we are switching on instant internal transfers for all Apex Trust clients. Transfers between client accounts now settle immediately, 24/7, with a full audit trail on every movement.\n\nWhat this means for you: no cut-off times, no batch delays, and a downloadable official statement the moment any transaction lands. Visit the Send Money tab to try it — your first 500 ZWL of fees this month is on us.', author_name: 'Apex Trust Communications' },
+  { title: 'Five habits that keep your online banking safe', slug: 'five-safe-banking-habits', excerpt: 'Our security team shares the practical basics that stop most account takeovers.', body: '1. Never reuse your banking password anywhere else.\n2. Check the account number twice before sending — transfers are instant and hard to reverse.\n3. Sign out when you finish, especially on shared devices.\n4. Review your transaction history weekly; report anything you do not recognise immediately.\n5. Keep your registered email and phone up to date in Profile Settings so we can reach you fast.', author_name: 'Apex Trust Security Team' },
+  { title: 'We are hiring: engineering and fraud analytics', slug: 'we-are-hiring-2026', excerpt: 'Grow with the team building Zimbabwe-friendly digital banking.', body: 'Apex Trust Bank is expanding its digital teams in Harare and Bulawayo. We are looking for backend engineers, fraud analysts, and support specialists who care about building financial products for the local market.\n\nOpen roles are listed on the Careers tab. Applications are reviewed on a rolling basis — attach a short cover letter telling us what you would build first.', author_name: 'Apex Trust People Team' },
+];
+
+const SEED_JOBS = [
+  { title: 'Backend Engineer (Node.js)', department: 'Engineering', location: 'Harare', employment_type: 'Full-time', description: 'Build and run the REST and GraphQL services behind Apex Trust online banking. You will own APIs end to end — design, Postgres data modelling, observability, and hardening.', salary_min: 24000, salary_max: 42000 },
+  { title: 'Fraud & Threat Analyst', department: 'Security Operations', location: 'Harare', employment_type: 'Full-time', description: 'Work the Loopback SOC floor: triage correlated API-to-database alerts, investigate multi-step attack chains, and tune detection rules with the engineering team.', salary_min: 21000, salary_max: 36000 },
+  { title: 'Customer Support Specialist', department: 'Client Services', location: 'Bulawayo', employment_type: 'Full-time', description: 'First line of support for our online banking clients — resolve queries over chat and email, and feed recurring issues back to product.', salary_min: 12000, salary_max: 18000 },
+  { title: 'Data Engineer (Payments)', department: 'Engineering', location: 'Remote (ZW)', employment_type: 'Contract', description: 'Model payment event streams, build the analytics pipelines behind our fraud statistics, and keep the warehouse fast and trustworthy.', salary_min: 18000, salary_max: 30000 },
+  { title: 'Graduate Rotational Programme 2027', department: 'All departments', location: 'Harare / Bulawayo', employment_type: 'Graduate', description: 'A 12-month rotation across engineering, security operations, and client services for recent computer science and engineering graduates.', salary_min: 9000, salary_max: 14000 },
+];
+
+async function seedContent() {
+  const { rows: p } = await tq('SELECT COUNT(*)::int AS n FROM blog_posts');
+  if (p[0].n === 0) {
+    for (const post of SEED_POSTS) {
+      await tq(
+        'INSERT INTO blog_posts (title, slug, excerpt, body, author_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (slug) DO NOTHING',
+        [post.title, post.slug, post.excerpt, post.body, post.author_name]
+      );
+    }
+  }
+  const { rows: j } = await tq('SELECT COUNT(*)::int AS n FROM jobs');
+  if (j[0].n === 0) {
+    for (const job of SEED_JOBS) {
+      await tq(
+        'INSERT INTO jobs (title, department, location, employment_type, description, salary_min, salary_max) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [job.title, job.department, job.location, job.employment_type, job.description, job.salary_min, job.salary_max]
+      );
+    }
+  }
+}
 
 export async function seedIfEmpty() {
   const { rows } = await tq('SELECT COUNT(*)::int AS n FROM users');
@@ -111,14 +209,84 @@ export async function seedIfEmpty() {
 }
 
 /* ==========================================================================
+   Statement document builder
+   ========================================================================== */
+
+export function buildStatementText(statement) {
+  const line = '================================================================================';
+  const rows = statement.transactions.map((t) => {
+    const dt = new Date(t.created_at).toISOString().replace('T', ' ').substring(0, 19);
+    const desc = String(t.description || '').padEnd(36).substring(0, 36);
+    const amt = `ZWL ${Number(t.amount).toFixed(2)}`.padStart(14);
+    return `${dt} | ${String(t.type).padEnd(8)} | ${desc} | ${amt}`;
+  });
+  return [
+    line,
+    '                        APEX TRUST BANK OF ZIMBABWE',
+    '                  Apex Towers, 102 Jason Moyo Avenue, Harare',
+    '                          OFFICIAL ACCOUNT STATEMENT',
+    line,
+    `Statement ID:   ${statement.statementId}`,
+    `Date Generated: ${new Date(statement.generatedAt).toLocaleString()}`,
+    `Period:         ${statement.period}`,
+    '--------------------------------------------------------------------------------',
+    'ACCOUNT HOLDER DETAILS:',
+    `  Name:         ${statement.accountHolder.name}`,
+    `  Account No:   ${statement.account.accountNumber} (${statement.account.type})`,
+    `  Email:        ${statement.accountHolder.email}`,
+    `  Address:      ${statement.accountHolder.address}`,
+    `  Currency:     ${statement.account.currency}`,
+    `  Ledger Balance: ZWL ${Number(statement.account.balance).toFixed(2)}`,
+    '--------------------------------------------------------------------------------',
+    'TRANSACTION HISTORY:',
+    'DATE / TIME           | TYPE     | DESCRIPTION                          | AMOUNT',
+    '----------------------+----------+--------------------------------------+--------------',
+    ...rows,
+    line,
+    'This is an official computer-generated statement issued by Apex Trust Bank.',
+    line,
+  ].join('\n');
+}
+
+export async function buildStatement(accountNumber) {
+  const account = await getAccountByNumber(accountNumber);
+  if (!account) return null;
+  const owner = await getUserById(account.user_id);
+  if (!owner) return null;
+  const txns = await getTransactions(account.id);
+  const statement = {
+    statementId: `STM-2026-${String(account.account_number).replace('ACC-', '')}92`,
+    generatedAt: new Date().toISOString(),
+    bankName: 'Apex Trust Bank',
+    bankAddress: 'Apex Towers, 102 Jason Moyo Avenue, Harare, Zimbabwe',
+    period: 'Current active quarter',
+    accountHolder: {
+      name: owner.name,
+      username: owner.username,
+      email: owner.email,
+      address: owner.address,
+      userId: owner.id,
+    },
+    account: {
+      accountNumber: account.account_number,
+      type: account.type,
+      balance: Number(account.balance),
+      currency: account.currency,
+    },
+    transactions: txns,
+  };
+  return { statement, textDocument: buildStatementText(statement) };
+}
+
+/* ==========================================================================
    Row helpers
    ========================================================================== */
 
-export async function createUser({ name, username, email, password, address = '' }) {
+export async function createUser({ name, username, email, password, address = '', phone = '', occupation = '' }) {
   const apiKey = `live_sec_key_${crypto.randomBytes(10).toString('hex')}`;
   const { rows } = await tq(
-    'INSERT INTO users (username, name, email, password, api_key, address) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-    [username.trim(), name.trim(), (email || '').trim() || `${username.trim().toLowerCase()}@apexbank.test`, String(password), apiKey, address]
+    'INSERT INTO users (username, name, email, password, api_key, address, phone, occupation) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+    [username.trim(), name.trim(), (email || '').trim() || `${username.trim().toLowerCase()}@apexbank.test`, String(password), apiKey, address, phone, occupation]
   );
   const user = rows[0];
   const accountNumber = `ACC-${1000 + user.id}`;
@@ -150,6 +318,19 @@ export async function getUserById(id) {
 
 export async function updateUserEmail(id, email) {
   const { rows } = await tq('UPDATE users SET email = $2 WHERE id = $1 RETURNING *', [Number(id), email]);
+  return rows[0];
+}
+
+export async function updateUserDetails(id, { email, phone, address, occupation }) {
+  const { rows } = await tq(
+    `UPDATE users SET
+       email = COALESCE($2, email),
+       phone = COALESCE($3, phone),
+       address = COALESCE($4, address),
+       occupation = COALESCE($5, occupation)
+     WHERE id = $1 RETURNING *`,
+    [Number(id), email ?? null, phone ?? null, address ?? null, occupation ?? null]
+  );
   return rows[0];
 }
 
@@ -200,6 +381,159 @@ export async function credit(accountId, amount) {
 }
 
 /* ==========================================================================
+   Blog
+   ========================================================================== */
+
+export async function listBlogPosts() {
+  const { rows } = await tq(
+    `SELECT p.*, (SELECT COUNT(*)::int FROM blog_comments c WHERE c.post_id = p.id) AS comment_count
+     FROM blog_posts p ORDER BY p.published_at DESC`
+  );
+  return rows;
+}
+
+export async function getBlogPost(id) {
+  const { rows } = await tq('SELECT * FROM blog_posts WHERE id = $1 LIMIT 1', [Number(id)]);
+  return rows[0];
+}
+
+export async function listComments(postId) {
+  const { rows } = await tq(
+    'SELECT * FROM blog_comments WHERE post_id = $1 ORDER BY created_at DESC LIMIT 100',
+    [Number(postId)]
+  );
+  return rows;
+}
+
+export async function addComment({ postId, userId, authorName, body }) {
+  const { rows } = await tq(
+    'INSERT INTO blog_comments (post_id, user_id, author_name, body) VALUES ($1,$2,$3,$4) RETURNING *',
+    [Number(postId), userId ?? null, authorName ?? 'Guest', String(body)]
+  );
+  return rows[0];
+}
+
+/* ==========================================================================
+   Careers
+   ========================================================================== */
+
+export async function listJobs() {
+  const { rows } = await tq(
+    `SELECT j.*, (SELECT COUNT(*)::int FROM job_applications a WHERE a.job_id = j.id) AS application_count
+     FROM jobs j ORDER BY j.posted_at DESC`
+  );
+  return rows;
+}
+
+export async function getJob(id) {
+  const { rows } = await tq('SELECT * FROM jobs WHERE id = $1 LIMIT 1', [Number(id)]);
+  return rows[0];
+}
+
+export async function createApplication({ jobId, userId, coverLetter }) {
+  const { rows } = await tq(
+    'INSERT INTO job_applications (job_id, user_id, cover_letter) VALUES ($1,$2,$3) RETURNING *',
+    [Number(jobId), Number(userId), String(coverLetter || '')]
+  );
+  return rows[0];
+}
+
+export async function listApplicationsForUser(userId) {
+  const { rows } = await tq(
+    `SELECT a.*, j.title AS job_title, j.department, j.location
+     FROM job_applications a JOIN jobs j ON j.id = a.job_id
+     WHERE a.user_id = $1 ORDER BY a.created_at DESC`,
+    [Number(userId)]
+  );
+  return rows;
+}
+
+export async function getApplication(id) {
+  // VULN: no ownership filter — any caller can read any application by id.
+  const { rows } = await tq(
+    `SELECT a.*, j.title AS job_title, u.name AS applicant_name, u.email AS applicant_email
+     FROM job_applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.user_id
+     WHERE a.id = $1 LIMIT 1`,
+    [Number(id)]
+  );
+  return rows[0];
+}
+
+export async function withdrawApplication(id) {
+  // VULN: no ownership filter — any caller can withdraw any application by id.
+  const { rows } = await tq('DELETE FROM job_applications WHERE id = $1 RETURNING id', [Number(id)]);
+  return rows[0];
+}
+
+/* ==========================================================================
+   Support chat
+   ========================================================================== */
+
+export async function saveChat({ convoId, userId, role, text }) {
+  const { rows } = await tq(
+    'INSERT INTO support_messages (convo_id, user_id, role, text) VALUES ($1,$2,$3,$4) RETURNING *',
+    [String(convoId), userId ?? null, role, String(text)]
+  );
+  return rows[0];
+}
+
+export async function listChat(convoId) {
+  const { rows } = await tq(
+    'SELECT * FROM support_messages WHERE convo_id = $1 ORDER BY created_at ASC LIMIT 200',
+    [String(convoId)]
+  );
+  return rows;
+}
+
+/* ==========================================================================
+   SOC control plane
+   ========================================================================== */
+
+export async function applyControl({ kind, value, reason, source = 'manual' }) {
+  const { rows } = await tq(
+    'INSERT INTO soc_controls (kind, value, reason, source) VALUES ($1,$2,$3,$4) RETURNING *',
+    [String(kind), String(value), reason ?? null, source]
+  );
+  if (kind === 'block_user') {
+    // Kill every live session of the blocked user immediately.
+    await tq('DELETE FROM sessions WHERE user_id = $1', [Number(value)]);
+  } else if (kind === 'revoke_session') {
+    await tq('DELETE FROM sessions WHERE token = $1', [String(value)]);
+  }
+  return rows[0];
+}
+
+export async function deactivateControl(kind, value) {
+  const { rows } = await tq(
+    'UPDATE soc_controls SET active = false WHERE kind = $1 AND value = $2 AND active = true RETURNING id',
+    [String(kind), String(value)]
+  );
+  return rows.length;
+}
+
+export async function isUserBlocked(userId) {
+  const { rows } = await tq(
+    "SELECT 1 FROM soc_controls WHERE kind = 'block_user' AND value = $1 AND active = true LIMIT 1",
+    [String(userId)]
+  );
+  return rows.length > 0;
+}
+
+export async function isSessionRevoked(token) {
+  if (!token) return false;
+  const { rows } = await tq(
+    "SELECT 1 FROM soc_controls WHERE kind = 'revoke_session' AND value = $1 AND active = true LIMIT 1",
+    [String(token)]
+  );
+  return rows.length > 0;
+}
+
+export async function activeControls() {
+  const { rows } = await tq('SELECT * FROM soc_controls WHERE active = true ORDER BY created_at DESC LIMIT 200');
+  return rows;
+}
+
+/* ==========================================================================
    Sessions
    ========================================================================== */
 
@@ -224,6 +558,6 @@ export async function deleteSession(token) {
 
 export function safeUser(user) {
   if (!user) return null;
-  const { password, ...rest } = user;
+  const { password, api_key, ...rest } = user;
   return rest;
 }

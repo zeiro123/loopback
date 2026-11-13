@@ -23,6 +23,8 @@ services:
     environment:
       SOC_DATABASE_URL: postgres://postgres:12345678@db:5432/soc
       SOC_PORT: "5100"
+      TARGET_URL: http://target:5000
+      SOC_CONTROL_KEY: loopback-soc-key
     ports:
       - "5100:5100"
     depends_on:
@@ -36,6 +38,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:12345678@db:5432/loopback
       SOC_URL: http://soc:5100
+      SOC_CONTROL_KEY: loopback-soc-key
       PORT: "5000"
     ports:
       - "5000:5000"

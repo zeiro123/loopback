@@ -9,9 +9,10 @@
  *   3. Enumeration      — ≥3 distinct object targets in a sliding 60s window
  *   4. Cross-functional — flagged activity spans ≥2 distinct endpoint classes
  *
- * Every alert embeds the loopback chain: the API request, the SQL it produced
- * (joined on trace id), the object owner, and the impact — the evidence an
- * analyst needs to go from a suspicious query back to the user behind it.
+ * Every alert embeds the loopback chain: the device (IP + user-agent), the API
+ * request, the SQL it produced (joined on trace id), the data tables touched,
+ * the object owner, and the impact. Returns the raised alerts so the caller can
+ * run the autonomous-response policy on them.
  */
 import {
   recentWindow, dbEventsForTrace, countRecentAlerts, insertAlert,
@@ -30,20 +31,26 @@ function targetOf(ev) {
   return ro.accountNumber || (ro.userId != null ? `user:${ro.userId}` : null) || meta.toAccountNumber || null;
 }
 
+function tablesOf(queries) {
+  const tables = new Set();
+  for (const q of queries) {
+    for (const m of String(q.query || '').matchAll(/(?:\bFROM\b|\bJOIN\b|\bINTO\b|\bUPDATE\b)\s+([a-z_][a-z0-9_]*)/gi)) {
+      if (!['now', 'interval'].includes(m[1].toLowerCase())) tables.add(m[1]);
+    }
+  }
+  return [...tables];
+}
+
 function severityRank(s) {
   return { INFO: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 }[s] ?? 0;
 }
 
-function maxSeverity(a, b) {
-  return severityRank(a) >= severityRank(b) ? a : b;
-}
-
-function bump(sev, isCross) {
-  return isCross ? maxSeverity(sev, 'HIGH') : sev;
+function makeId() {
+  return `alert_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /* ==========================================================================
-   Attack path builder — nodes actor → endpoint → query → target → impact
+   Attack path builder — device → session → API → SQL → data → impact
    ========================================================================== */
 
 async function buildAttackPath(ev, kind) {
@@ -51,8 +58,9 @@ async function buildAttackPath(ev, kind) {
   const endpoint = `${ev.method} ${ev.endpoint}`;
   const queries = await dbEventsForTrace(ev.trace_id);
   const queryTemplates = queries.map((q) => q.template);
+  const tables = tablesOf(queries);
   const queryLabel = queryTemplates.length
-    ? `${queryTemplates.length} SQL statement(s): ${queryTemplates[0]}${queryTemplates.length > 1 ? ' …' : ''}`
+    ? `${queryTemplates.length} SQL statement(s) on ${tables.length || 'no'} table(s)`
     : 'No SQL captured for this trace';
   const ro = ev.resource_owner || {};
   const target = ro.accountNumber
@@ -69,32 +77,52 @@ async function buildAttackPath(ev, kind) {
     ENUM: 'Horizontal resource enumeration sweep',
   };
 
+  // Layered data-traversal graph: device → session → api → sql → data → impact
   const nodes = [
-    { type: 'actor', label: actor, details: `Session ${String(ev.session_token || 'anon').slice(0, 12)}… • ${ev.ip || 'no ip'}` },
-    { type: 'endpoint', label: endpoint, details: `${String(ev.api || 'rest').toUpperCase()}${ev.operation ? ` • ${ev.operation}` : ''} → HTTP ${ev.status_code}` },
-    { type: 'query', label: 'Correlated SQL (trace join)', details: queryLabel },
-    { type: 'target', label: target, details: ro.accountNumber ? 'Object reached without ownership check' : 'Object reached' },
-    { type: 'impact', label: impacts[kind] || 'Anomalous activity', details: `trace ${String(ev.trace_id).slice(0, 8)}…` },
+    {
+      layer: 'device', type: 'device', label: 'Client device',
+      details: `IP ${ev.ip || 'unknown'} • ${String(ev.user_agent || 'unknown user-agent').slice(0, 90)}`,
+    },
+    {
+      layer: 'session', type: 'session', label: 'Session',
+      details: `token ${String(ev.session_token || 'anon').slice(0, 14)}… • actor ${actor}`,
+    },
+    {
+      layer: 'api', type: 'endpoint', label: endpoint,
+      details: `${String(ev.api || 'rest').toUpperCase()}${ev.operation ? ` • ${ev.operation}` : ''} → HTTP ${ev.status_code} • server: loopback-target`,
+    },
+    {
+      layer: 'sql', type: 'query', label: 'Correlated SQL',
+      details: queryTemplates.length
+        ? `${queryTemplates.length} statement(s): ${queryTemplates[0]}${queryTemplates.length > 1 ? ' …' : ''}`
+        : 'No SQL captured for this trace',
+      statements: queryTemplates,
+    },
+    {
+      layer: 'data', type: 'data', label: tables.length ? `Tables: ${tables.join(', ')}` : 'No tables touched',
+      details: `PostgreSQL (loopback db) • rows returned by this trace: ${queries.reduce((n, q) => n + (q.row_count || 0), 0)} • target: ${target}`,
+    },
+    {
+      layer: 'impact', type: 'impact', label: impacts[kind] || 'Anomalous activity',
+      details: `trace ${String(ev.trace_id).slice(0, 8)}… • detection: sequence rules over the ${WINDOW_SECONDS}s session window`,
+    },
   ];
-  const edges = nodes.slice(0, -1).map((n, i) => ({ from: i, to: i + 1, label: ['issued request', 'produced SQL', 'touched object', 'resulted in'][i] }));
+  const edges = nodes.slice(0, -1).map((n, i) => ({
+    from: i,
+    to: i + 1,
+    label: ['originates from', 'authenticates to', 'produces', 'reads / writes', 'results in'][i],
+  }));
 
   const steps = [
-    { step: 1, phase: 'Session', title: 'Authenticated actor', description: `${actor} acted with a valid session token.`, status: 'SUCCESS', ts: ev.ts },
-    { step: 2, phase: 'API call', title: `${endpoint}`, description: `${String(ev.api || 'rest').toUpperCase()} request${ev.operation ? ` (${ev.operation})` : ''} returned HTTP ${ev.status_code}.`, status: 'SUCCESS', ts: ev.ts },
-    { step: 3, phase: 'Loopback join', title: 'Request bound to SQL', description: `trace ${ev.trace_id} produced: ${queryTemplates.join(' | ') || 'no SQL'}.`, status: 'FLAGGED', ts: ev.ts },
-    { step: 4, phase: 'Object access', title: `Reached ${target}`, description: kind === 'IDOR' ? 'Object owner does not match the authenticated actor — object-level authorization missing.' : 'Business-rule evaluation over the correlated pair.', status: kind === 'IDOR' && ev.status_code === 200 ? 'FLAGGED' : 'SUCCESS', ts: ev.ts },
-    { step: 5, phase: 'Detection', title: 'Loopback alert raised', description: `Sequence-level detector flagged this session activity (severity computed over the ${WINDOW_SECONDS}s window, not the single request).`, status: 'FLAGGED', ts: ev.ts },
+    { step: 1, phase: 'Device', title: 'Request originated', description: `Client device at ${ev.ip || 'unknown IP'} (${String(ev.user_agent || 'unknown UA').slice(0, 70)}) sent the request.`, status: 'SUCCESS', ts: ev.ts },
+    { step: 2, phase: 'Session', title: 'Authenticated actor', description: `${actor} acted with a valid session token.`, status: 'SUCCESS', ts: ev.ts },
+    { step: 3, phase: 'API call', title: endpoint, description: `${String(ev.api || 'rest').toUpperCase()} request${ev.operation ? ` (${ev.operation})` : ''} on loopback-target returned HTTP ${ev.status_code}.`, status: 'SUCCESS', ts: ev.ts },
+    { step: 4, phase: 'Loopback join', title: 'Request bound to SQL', description: `trace ${ev.trace_id} produced: ${queryTemplates.join(' | ') || 'no SQL'}.`, status: 'FLAGGED', ts: ev.ts },
+    { step: 5, phase: 'Data traversal', title: `Touched ${tables.length ? tables.join(', ') : 'no tables'}`, description: `Target object reached: ${target}. Rows returned: ${queries.reduce((n, q) => n + (q.row_count || 0), 0)}.`, status: kind === 'IDOR' && ev.status_code === 200 ? 'FLAGGED' : 'SUCCESS', ts: ev.ts },
+    { step: 6, phase: 'Detection', title: 'Loopback alert raised', description: `Sequence-level detector flagged this session activity — severity computed over the ${WINDOW_SECONDS}s window, not the single request.`, status: 'FLAGGED', ts: ev.ts },
   ];
 
   return { nodes, edges, steps };
-}
-
-/* ==========================================================================
-   Alert factory
-   ========================================================================== */
-
-function makeId() {
-  return `alert_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
@@ -129,8 +157,11 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     affectedEndpoints: affected,
     evidence: {
       traceId: ev.trace_id,
+      sessionToken: ev.session_token || null,
       api: ev.api,
       operation: ev.operation,
+      ip: ev.ip,
+      userAgent: ev.user_agent,
       request: { method: ev.method, endpoint: ev.endpoint, statusCode: ev.status_code },
       resourceOwner: ev.resource_owner,
       meta: ev.meta,
@@ -150,9 +181,9 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
    ========================================================================== */
 
 export async function evaluateEvent(ev) {
-  if (ev.actor_id == null) return; // anonymous events (login failures etc.) — no session to correlate
+  if (ev.actor_id == null) return []; // anonymous events (login failures etc.) — no session to correlate
   const windowEvs = await recentWindow(ev.actor_id, WINDOW_SECONDS);
-  if (!windowEvs.length) return;
+  if (!windowEvs.length) return [];
 
   const flags = [];
 
@@ -210,7 +241,9 @@ export async function evaluateEvent(ev) {
     }
   }
 
+  const raised = [];
   for (const f of flags) {
-    await raiseAlert({ ev, kind: f.kind, title: f.title, summary: f.summary, windowEvs });
+    raised.push(await raiseAlert({ ev, kind: f.kind, title: f.title, summary: f.summary, windowEvs }));
   }
+  return raised;
 }

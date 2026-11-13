@@ -4,22 +4,34 @@
  * Serves a realistic bank on PostgreSQL (ZWL accounts) and forwards every
  * request (REST + GraphQL) plus its tagged SQL queries to the Loopback SOC.
  *
+ * Intentionally vulnerable: BOLA/IDOR (statements, accounts, users, api keys,
+ * job applications), negative/overdraft transfers, chatbot data leak,
+ * horizontal enumeration. The SOC can block users / revoke sessions through
+ * the control plane — enforcement happens on every request.
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createYoga, createSchema } from 'graphql-yoga';
+import { yoga } from './graphql.js';
 import {
-  ensureSchema, seedIfEmpty, tq, pool,
-  createUser, getUserByUsername, getUserById, updateUserEmail,
+  ensureSchema, seedIfEmpty, pool,
+  createUser, getUserByUsername, getUserById, updateUserEmail, updateUserDetails,
   getAccountByNumber, getAccountByUserId, getTransactions,
-  createTransaction, debit, credit,
-  createSession, getSessionUser, deleteSession, safeUser,
+  createTransaction, debit, credit, safeUser,
+  createSession, getSessionUser, deleteSession,
+  listBlogPosts, getBlogPost, listComments, addComment,
+  listJobs, getJob, createApplication, listApplicationsForUser, getApplication, withdrawApplication,
+  saveChat, listChat,
+  isUserBlocked, isSessionRevoked,
 } from './db.js';
+import { buildStatement } from './db.js';
 import {
-  traceMiddleware, als, setActor, setParams, setResourceOwner, setMeta, setOperation,
+  traceMiddleware, setActor, setParams, setResourceOwner, setMeta,
 } from './trace.js';
+import { chatbotRespond } from './chatbot.js';
+import { handleControl, handleControlPoll } from './controls.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,15 +44,25 @@ app.use(traceMiddleware);
 app.use(express.json());
 
 /* ==========================================================================
-   Auth middleware
+   Auth middleware — resolves the session, then enforces SOC controls
    ========================================================================== */
 
 app.use(async (req, _res, next) => {
   const header = req.headers['authorization'];
   if (header && header.startsWith('Bearer ')) {
     const token = header.slice(7).trim();
+    // Control enforcement 1: SOC-revoked sessions are dead immediately.
+    if (await isSessionRevoked(token)) {
+      req.revoked = true;
+      return next();
+    }
     const user = await getSessionUser(token);
     if (user) {
+      // Control enforcement 2: SOC-blocked users get nothing.
+      if (await isUserBlocked(user.id)) {
+        req.blocked = true;
+        return next();
+      }
       req.token = token;
       req.user = user;
       setActor(user, token);
@@ -49,82 +71,20 @@ app.use(async (req, _res, next) => {
   next();
 });
 
-function requireAuth(req, res) {
+function guard(req, res) {
+  if (req.revoked) {
+    res.status(401).json({ success: false, error: 'Session revoked by security operations', code: 'SESSION_REVOKED' });
+    return false;
+  }
+  if (req.blocked) {
+    res.status(403).json({ success: false, error: 'Account blocked by security operations. Contact support.', code: 'USER_BLOCKED' });
+    return false;
+  }
   if (!req.user) {
     res.status(401).json({ success: false, error: 'Unauthorized: missing or invalid session token' });
     return false;
   }
   return true;
-}
-
-/* ==========================================================================
-   Statement document builder
-   ========================================================================== */
-
-function buildStatementText(statement) {
-  const line = '================================================================================';
-  const rows = statement.transactions.map((t) => {
-    const dt = new Date(t.created_at).toISOString().replace('T', ' ').substring(0, 19);
-    const desc = String(t.description || '').padEnd(36).substring(0, 36);
-    const amt = `ZWL ${Number(t.amount).toFixed(2)}`.padStart(14);
-    return `${dt} | ${String(t.type).padEnd(8)} | ${desc} | ${amt}`;
-  });
-  return [
-    line,
-    `                        ${BANK_NAME.toUpperCase()} OF ZIMBABWE`,
-    '                  Apex Towers, 102 Jason Moyo Avenue, Harare',
-    '                          OFFICIAL ACCOUNT STATEMENT',
-    line,
-    `Statement ID:   ${statement.statementId}`,
-    `Date Generated: ${new Date(statement.generatedAt).toLocaleString()}`,
-    `Period:         ${statement.period}`,
-    '--------------------------------------------------------------------------------',
-    'ACCOUNT HOLDER DETAILS:',
-    `  Name:         ${statement.accountHolder.name}`,
-    `  Account No:   ${statement.account.accountNumber} (${statement.account.type})`,
-    `  Email:        ${statement.accountHolder.email}`,
-    `  Address:      ${statement.accountHolder.address}`,
-    `  Currency:     ${statement.account.currency}`,
-    `  Ledger Balance: ZWL ${Number(statement.account.balance).toFixed(2)}`,
-    '--------------------------------------------------------------------------------',
-    'TRANSACTION HISTORY:',
-    'DATE / TIME           | TYPE     | DESCRIPTION                          | AMOUNT',
-    '----------------------+----------+--------------------------------------+--------------',
-    ...rows,
-    line,
-    'This is an official computer-generated statement issued by Apex Trust Bank.',
-    line,
-  ].join('\n');
-}
-
-async function buildStatement(accountNumber) {
-  const account = await getAccountByNumber(accountNumber);
-  if (!account) return null;
-  const owner = await getUserById(account.user_id);
-  if (!owner) return null;
-  const txns = await getTransactions(account.id);
-  const statement = {
-    statementId: `STM-2026-${String(account.account_number).replace('ACC-', '')}92`,
-    generatedAt: new Date().toISOString(),
-    bankName: BANK_NAME,
-    bankAddress: 'Apex Towers, 102 Jason Moyo Avenue, Harare, Zimbabwe',
-    period: 'Current active quarter',
-    accountHolder: {
-      name: owner.name,
-      username: owner.username,
-      email: owner.email,
-      address: owner.address,
-      userId: owner.id,
-    },
-    account: {
-      accountNumber: account.account_number,
-      type: account.type,
-      balance: Number(account.balance),
-      currency: account.currency,
-    },
-    transactions: txns,
-  };
-  return { statement, textDocument: buildStatementText(statement) };
 }
 
 /* ==========================================================================
@@ -153,12 +113,7 @@ app.post('/api/auth/register', async (req, res) => {
     message: `Welcome to ${BANK_NAME}, ${user.name}! Your account ${account.account_number} has been opened with a 500 ZWL deposit.`,
     token,
     user: safeUser(user),
-    account: {
-      accountNumber: account.account_number,
-      type: account.type,
-      balance: Number(account.balance),
-      currency: account.currency,
-    },
+    account: { accountNumber: account.account_number, type: account.type, balance: Number(account.balance), currency: account.currency },
   });
 });
 
@@ -172,6 +127,11 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user || user.password !== String(password).trim()) {
     return res.status(401).json({ success: false, error: 'Invalid username or password' });
   }
+  // Control enforcement 3: SOC-blocked users cannot sign in.
+  if (await isUserBlocked(user.id)) {
+    setMeta({ login: 'blocked' });
+    return res.status(403).json({ success: false, error: 'Account blocked by security operations. Contact support.', code: 'USER_BLOCKED' });
+  }
   const token = await createSession(user.id);
   const account = await getAccountByUserId(user.id);
   setMeta({ login: 'success' });
@@ -180,31 +140,17 @@ app.post('/api/auth/login', async (req, res) => {
     message: `Welcome back, ${user.name}!`,
     token,
     user: safeUser(user),
-    account: account
-      ? {
-          accountNumber: account.account_number,
-          type: account.type,
-          balance: Number(account.balance),
-          currency: account.currency,
-        }
-      : null,
+    account: account ? { accountNumber: account.account_number, type: account.type, balance: Number(account.balance), currency: account.currency } : null,
   });
 });
 
 app.get('/api/auth/me', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const account = await getAccountByUserId(req.user.id);
   res.json({
     success: true,
     user: safeUser(req.user),
-    account: account
-      ? {
-          accountNumber: account.account_number,
-          type: account.type,
-          balance: Number(account.balance),
-          currency: account.currency,
-        }
-      : null,
+    account: account ? { accountNumber: account.account_number, type: account.type, balance: Number(account.balance), currency: account.currency } : null,
   });
 });
 
@@ -219,7 +165,7 @@ app.post('/api/auth/logout', async (req, res) => {
 
 // GET /api/accounts/:accountNumber/balance — VULN: no object-level authorization
 app.get('/api/accounts/:accountNumber/balance', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const account = await getAccountByNumber(req.params.accountNumber);
   if (!account) return res.status(404).json({ success: false, error: 'Account not found' });
   const owner = await getUserById(account.user_id);
@@ -239,7 +185,7 @@ app.get('/api/accounts/:accountNumber/balance', async (req, res) => {
 
 // GET /api/accounts/:accountNumber/transactions — VULN: no ownership check (IDOR)
 app.get('/api/accounts/:accountNumber/transactions', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const account = await getAccountByNumber(req.params.accountNumber);
   if (!account) return res.status(404).json({ success: false, error: 'Account not found' });
   const owner = await getUserById(account.user_id);
@@ -257,7 +203,7 @@ app.get('/api/accounts/:accountNumber/transactions', async (req, res) => {
 
 // POST /api/transfers — VULN: negative amounts inflate the balance, overdraft bypassed
 app.post('/api/transfers', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const { toAccountNumber, amount, memo } = req.body || {};
   const numAmount = Number(amount);
   setParams({ toAccountNumber, amount: numAmount });
@@ -325,7 +271,7 @@ app.post('/api/transfers', async (req, res) => {
 
 // GET /api/statements/:accountNumber — VULN: IDOR / BOLA on account number
 app.get('/api/statements/:accountNumber', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const requested = String(req.params.accountNumber || '').trim();
   setParams({ accountNumber: requested });
   const built = await buildStatement(requested);
@@ -343,7 +289,7 @@ app.get('/api/statements/:accountNumber', async (req, res) => {
 
 // PUT /api/users/:id/email — VULN: cross-user modification
 app.put('/api/users/:id/email', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const { email } = req.body || {};
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     return res.status(400).json({ success: false, error: 'A valid email address is required' });
@@ -356,9 +302,32 @@ app.put('/api/users/:id/email', async (req, res) => {
   res.json({ success: true, message: `Email updated for user ID ${updated.id}`, user: safeUser(updated) });
 });
 
+// GET /api/users/:id — VULN: view any client's full details (PII leak)
+app.get('/api/users/:id', async (req, res) => {
+  if (!guard(req, res)) return;
+  const target = await getUserById(req.params.id);
+  setParams({ targetUserId: Number(req.params.id) });
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  setResourceOwner({ userId: target.id });
+  setMeta({ pii: 'details_viewed' });
+  res.json({ success: true, user: safeUser(target) });
+});
+
+// PUT /api/users/:id/details — VULN: update any client's details (IDOR write)
+app.put('/api/users/:id/details', async (req, res) => {
+  if (!guard(req, res)) return;
+  const { email, phone, address, occupation } = req.body || {};
+  const before = await getUserById(req.params.id);
+  const updated = await updateUserDetails(req.params.id, { email, phone, address, occupation });
+  if (!updated) return res.status(404).json({ success: false, error: 'User not found' });
+  setResourceOwner({ userId: updated.id });
+  setMeta({ pii: 'details_modified', changedFrom: { phone: before?.phone, address: before?.address } });
+  res.json({ success: true, message: `Details updated for user ID ${updated.id}`, user: safeUser(updated) });
+});
+
 // GET /api/users/:id/apikey — VULN: cross-user secret key access
 app.get('/api/users/:id/apikey', async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  if (!guard(req, res)) return;
   const target = await getUserById(req.params.id);
   setParams({ targetUserId: Number(req.params.id) });
   if (!target) return res.status(404).json({ success: false, error: 'User does not exist' });
@@ -366,6 +335,134 @@ app.get('/api/users/:id/apikey', async (req, res) => {
   setMeta({ secret: 'api_key_accessed' });
   res.json({ success: true, userId: target.id, username: target.username, name: target.name, apiKey: target.api_key });
 });
+
+/* ==========================================================================
+   REST — company blog
+   ========================================================================== */
+
+app.get('/api/blog/posts', async (_req, res) => {
+  const posts = await listBlogPosts();
+  res.json({ success: true, count: posts.length, posts });
+});
+
+app.get('/api/blog/posts/:id', async (req, res) => {
+  setParams({ postId: Number(req.params.id) });
+  const post = await getBlogPost(req.params.id);
+  if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+  const comments = await listComments(post.id);
+  res.json({ success: true, post, comments });
+});
+
+app.post('/api/blog/posts/:id/comments', async (req, res) => {
+  const { body } = req.body || {};
+  setParams({ postId: Number(req.params.id) });
+  if (!body || !String(body).trim()) {
+    return res.status(400).json({ success: false, error: 'Comment body is required' });
+  }
+  const post = await getBlogPost(req.params.id);
+  if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+  const comment = await addComment({
+    postId: post.id,
+    userId: req.user?.id ?? null,
+    authorName: req.user?.name ?? 'Guest',
+    body: String(body),
+  });
+  setResourceOwner(req.user ? { userId: req.user.id } : null);
+  res.status(201).json({ success: true, comment });
+});
+
+/* ==========================================================================
+   REST — careers
+   ========================================================================== */
+
+app.get('/api/jobs', async (_req, res) => {
+  const jobs = await listJobs();
+  res.json({ success: true, count: jobs.length, jobs });
+});
+
+app.get('/api/jobs/:id', async (req, res) => {
+  const job = await getJob(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+  res.json({ success: true, job });
+});
+
+// POST /api/jobs/:id/apply — submit an application (authenticated)
+app.post('/api/jobs/:id/apply', async (req, res) => {
+  if (!guard(req, res)) return;
+  const { coverLetter } = req.body || {};
+  const job = await getJob(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+  setParams({ jobId: job.id });
+  const app1 = await createApplication({ jobId: job.id, userId: req.user.id, coverLetter });
+  const full = await getApplication(app1.id);
+  setResourceOwner({ userId: req.user.id });
+  setMeta({ jobTitle: job.title });
+  res.status(201).json({ success: true, message: `Application submitted for ${job.title}.`, application: full });
+});
+
+// GET /api/applications/mine — the signed-in user's applications
+app.get('/api/applications/mine', async (req, res) => {
+  if (!guard(req, res)) return;
+  const apps = await listApplicationsForUser(req.user.id);
+  res.json({ success: true, count: apps.length, applications: apps });
+});
+
+// GET /api/applications/:id — VULN: any applicant's cover letter + PII (IDOR)
+app.get('/api/applications/:id', async (req, res) => {
+  if (!guard(req, res)) return;
+  setParams({ applicationId: Number(req.params.id) });
+  const app1 = await getApplication(req.params.id);
+  if (!app1) return res.status(404).json({ success: false, error: 'Application not found' });
+  setResourceOwner({ userId: app1.user_id });
+  setMeta({ secret: 'job_application_accessed', applicantEmail: app1.applicant_email });
+  res.json({ success: true, application: app1 });
+});
+
+// DELETE /api/applications/:id — VULN: withdraw ANY applicant's application (IDOR write)
+app.delete('/api/applications/:id', async (req, res) => {
+  if (!guard(req, res)) return;
+  setParams({ applicationId: Number(req.params.id) });
+  const app1 = await getApplication(req.params.id);
+  if (!app1) return res.status(404).json({ success: false, error: 'Application not found' });
+  await withdrawApplication(req.params.id);
+  setResourceOwner({ userId: app1.user_id });
+  setMeta({ pii: 'application_withdrawn', applicantEmail: app1.applicant_email });
+  res.json({ success: true, message: `Application ${req.params.id} withdrawn` });
+});
+
+/* ==========================================================================
+   REST — support chatbot
+   ========================================================================== */
+
+app.post('/api/support/chat', async (req, res) => {
+  const { message, convoId } = req.body || {};
+  setParams({ message });
+  const cid = convoId || `convo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const user = req.user ? safeUser(req.user) : null;
+  const account = req.user ? await getAccountByUserId(req.user.id) : null;
+
+  await saveChat({ convoId: cid, userId: req.user?.id ?? null, role: 'user', text: message });
+  const reply = await chatbotRespond(message, {
+    user,
+    account,
+    lookupAccount: (num) => getAccountByNumber(num), // VULN: reads any account balance
+  });
+  await saveChat({ convoId: cid, userId: req.user?.id ?? null, role: 'bot', text: reply });
+
+  res.json({ success: true, convoId: cid, reply });
+});
+
+app.get('/api/support/chat/:convoId', async (req, res) => {
+  const messages = await listChat(req.params.convoId);
+  res.json({ success: true, convoId: req.params.convoId, messages });
+});
+
+/* ==========================================================================
+   SOC control plane — the Loopback SOC applies response actions here
+   ========================================================================== */
+
+app.post('/api/soc/controls', handleControl);
+app.get('/api/soc/controls/poll', handleControlPoll);
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -377,236 +474,10 @@ app.get('/api/health', async (_req, res) => {
 });
 
 /* ==========================================================================
-   GraphQL — same bank, same vulnerabilities, second API surface
+   GraphQL + static bank UI
    ========================================================================== */
 
-const typeDefs = /* GraphQL */ `
-  type User {
-    id: Int!
-    username: String!
-    name: String!
-    email: String!
-    address: String
-    apiKey: String!
-  }
-  type Account {
-    accountNumber: String!
-    type: String!
-    balance: Float!
-    currency: String!
-    ownerUserId: Int!
-    transactions: [Transaction!]!
-  }
-  type Transaction {
-    id: Int!
-    description: String
-    amount: Float!
-    type: String!
-    createdAt: String!
-  }
-  type Statement {
-    accountNumber: String!
-    ownerName: String!
-    ownerEmail: String!
-    address: String!
-    balance: Float!
-    currency: String!
-    statementId: String!
-    textDocument: String!
-  }
-  type TransferResult {
-    success: Boolean!
-    message: String!
-    balance: Float!
-  }
-  type RegisterResult {
-    success: Boolean!
-    token: String
-    message: String!
-  }
-  type Query {
-    me: User
-    user(id: Int!): User
-    account(accountNumber: String!): Account
-    statement(accountNumber: String!): Statement
-  }
-  type Mutation {
-    transfer(toAccountNumber: String!, amount: Float!, memo: String): TransferResult!
-    register(name: String!, username: String!, email: String, password: String!): RegisterResult!
-  }
-`;
-
-function gqlAuth(ctx) {
-  if (!ctx.user) throw new Error('Unauthorized: missing or invalid session token');
-  return ctx.user;
-}
-
-function gqlUser(user) {
-  if (!user) return null;
-  const { password, api_key, ...rest } = user;
-  return { ...rest, apiKey: api_key ?? null };
-}
-
-const resolvers = {
-  Query: {
-    me: async (_p, _a, ctx) => {
-      const user = gqlAuth(ctx);
-      setOperation('me');
-      return gqlUser(user);
-    },
-    // VULN: any user's email + secret API key by numeric id (BOLA)
-    user: async (_p, { id }, ctx) => {
-      gqlAuth(ctx);
-      setOperation('user');
-      setParams({ targetUserId: id });
-      const target = await getUserById(id);
-      if (!target) throw new Error(`User ${id} does not exist`);
-      setResourceOwner({ userId: target.id });
-      setMeta({ secret: 'api_key_accessed' });
-      return gqlUser(target);
-    },
-    // VULN: any account's balance + transactions by account number (IDOR)
-    account: async (_p, { accountNumber }, ctx) => {
-      gqlAuth(ctx);
-      setOperation('account');
-      setParams({ accountNumber });
-      const account = await getAccountByNumber(accountNumber);
-      if (!account) throw new Error(`Account ${accountNumber} not found`);
-      const txns = await getTransactions(account.id);
-      setResourceOwner({ userId: account.user_id, accountNumber: account.account_number });
-      setMeta({ balance: Number(account.balance), transactionCount: txns.length });
-      return {
-        accountNumber: account.account_number,
-        type: account.type,
-        balance: Number(account.balance),
-        currency: account.currency,
-        ownerUserId: account.user_id,
-        transactions: txns.map((t) => ({
-          id: t.id,
-          description: t.description,
-          amount: Number(t.amount),
-          type: t.type,
-          createdAt: new Date(t.created_at).toISOString(),
-        })),
-      };
-    },
-    // VULN: any account holder's statement (PII leak)
-    statement: async (_p, { accountNumber }, ctx) => {
-      gqlAuth(ctx);
-      setOperation('statement');
-      setParams({ accountNumber });
-      const built = await buildStatement(accountNumber);
-      if (!built) throw new Error(`Account ${accountNumber} not found`);
-      setResourceOwner({ userId: built.statement.accountHolder.userId, accountNumber });
-      setMeta({
-        ownerName: built.statement.accountHolder.name,
-        ownerAddress: built.statement.accountHolder.address,
-        balance: built.statement.account.balance,
-      });
-      return {
-        accountNumber: built.statement.account.accountNumber,
-        ownerName: built.statement.accountHolder.name,
-        ownerEmail: built.statement.accountHolder.email,
-        address: built.statement.accountHolder.address,
-        balance: built.statement.account.balance,
-        currency: built.statement.account.currency,
-        statementId: built.statement.statementId,
-        textDocument: built.textDocument,
-      };
-    },
-  },
-  Mutation: {
-    // VULN: identical business-logic flaws over GraphQL
-    transfer: async (_p, { toAccountNumber, amount, memo }, ctx) => {
-      const user = gqlAuth(ctx);
-      setOperation('transfer');
-      const numAmount = Number(amount);
-      setParams({ toAccountNumber, amount: numAmount });
-      if (!toAccountNumber || !Number.isFinite(numAmount) || numAmount === 0) {
-        throw new Error('Recipient account and a non-zero amount are required');
-      }
-      const source = await getAccountByUserId(user.id);
-      if (!source) throw new Error('Source account not found');
-      const target = await getAccountByNumber(toAccountNumber);
-      const balanceBefore = Number(source.balance);
-      const isNegativeExploit = numAmount < 0;
-      const isOverdraftExploit = numAmount > 0 && numAmount > balanceBefore;
-
-      const balanceAfter = await debit(source.id, numAmount);
-      await createTransaction({
-        accountId: source.id,
-        fromUserId: user.id,
-        toAccountNumber,
-        amount: Math.abs(numAmount),
-        type: 'TRANSFER',
-        description: memo || (isNegativeExploit ? 'Reverse adjustment' : `Transfer to ${toAccountNumber}`),
-        balanceAfter,
-      });
-      if (target) {
-        await credit(target.id, numAmount);
-        await createTransaction({
-          accountId: target.id,
-          fromUserId: user.id,
-          toAccountNumber: target.account_number,
-          amount: Math.abs(numAmount),
-          type: isNegativeExploit ? 'TRANSFER' : 'DEPOSIT',
-          description: isNegativeExploit
-            ? `Reversed claim from ${user.name} (${source.account_number})`
-            : `Received from ${user.name} (${source.account_number}): ${memo || 'Transfer'}`,
-        });
-      }
-      setResourceOwner(target ? { userId: target.user_id, accountNumber: target.account_number } : null);
-      setMeta({
-        amount: numAmount,
-        balanceBefore,
-        balanceAfter,
-        toAccountNumber,
-        targetOwnerUserId: target?.user_id ?? null,
-        sourceAccountNumber: source.account_number,
-      });
-      return {
-        success: true,
-        message: isNegativeExploit
-          ? `Transfer processed. Balance credited by ZWL ${Math.abs(numAmount).toFixed(2)}.`
-          : isOverdraftExploit
-          ? `Overdraft transfer approved: ZWL ${numAmount.toFixed(2)} sent.`
-          : `Transferred ZWL ${numAmount.toFixed(2)} to ${toAccountNumber}.`,
-        balance: balanceAfter,
-      };
-    },
-    register: async (_p, { name, username, email, password }) => {
-      setOperation('register');
-      setParams({ name, username, email });
-      if (!name || !username || !password || String(password).length < 4) {
-        throw new Error('Name, username and a password of at least 4 characters are required');
-      }
-      if (await getUserByUsername(username)) throw new Error('That username is already taken');
-      const { user, account } = await createUser({ name, username, email, password });
-      const token = await createSession(user.id);
-      setResourceOwner({ userId: user.id, accountNumber: account.account_number });
-      setMeta({ openedWith: '500 ZWL opening deposit' });
-      return {
-        success: true,
-        token,
-        message: `Account ${account.account_number} opened with a 500 ZWL deposit for ${user.name}.`,
-      };
-    },
-  },
-};
-
-const yoga = createYoga({
-  schema: createSchema({ typeDefs, resolvers }),
-  graphqlEndpoint: '/graphql',
-  context: ({ req }) => ({ user: req.user ?? null, token: req.token ?? null }),
-  maskedErrors: false,
-  landingPage: true,
-});
 app.use('/graphql', yoga);
-
-/* ==========================================================================
-   Static bank UI
-   ========================================================================== */
-
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
