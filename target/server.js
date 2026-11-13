@@ -134,6 +134,11 @@ app.post('/api/auth/login', async (req, res) => {
   }
   const token = await createSession(user.id);
   const account = await getAccountByUserId(user.id);
+  // Anchor the session to its origin: the login event records the session token
+  // and the IP it was issued from — the SOC uses this to detect token replay
+  // from a different machine (session hijack).
+  setActor(user, token);
+  setResourceOwner({ userId: user.id, accountNumber: account?.account_number });
   setMeta({ login: 'success' });
   res.json({
     success: true,

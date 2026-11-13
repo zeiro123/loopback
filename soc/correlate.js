@@ -15,7 +15,7 @@
  * run the autonomous-response policy on them.
  */
 import {
-  recentWindow, dbEventsForTrace, countRecentAlerts, insertAlert,
+  recentWindow, dbEventsForTrace, countRecentAlerts, insertAlert, distinctIpsForSession,
 } from './db.js';
 
 const WINDOW_SECONDS = 60;
@@ -136,9 +136,16 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     severity = isCross && attempts >= 3 ? 'CRITICAL' : isCross ? 'HIGH' : attempts >= 3 ? 'HIGH' : attempts === 2 ? 'MEDIUM' : 'INFO';
   } else if (kind === 'BIZLOGIC') {
     severity = isCross || attempts >= 3 ? 'CRITICAL' : 'HIGH';
+  } else if (kind === 'HIJACK') {
+    severity = 'HIGH';
   } else {
     severity = isCross || attempts >= 4 ? 'CRITICAL' : 'HIGH';
   }
+
+  // Severity as a percentage (0–100): base by level, boosted by repetition and
+  // cross-functional breadth — the UI renders this on a continuous green→red scale.
+  const basePct = { INFO: 24, MEDIUM: 48, HIGH: 74, CRITICAL: 90 }[severity] ?? 50;
+  const severityPct = Math.min(99, basePct + (isCross ? 4 : 0) + Math.min(5, (attempts - 1) * 2));
 
   const affected = [...new Set(windowEvs.map((w) => w.endpoint.split('?')[0]))].slice(-6);
   const attackPath = await buildAttackPath(ev, kind);
@@ -148,8 +155,12 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     ts: new Date().toISOString(),
     actorId: ev.actor_id,
     username: ev.username,
-    alertType: kind === 'IDOR' ? 'POSSIBLE_IDOR_ATTACK' : kind === 'BIZLOGIC' ? 'POSSIBLE_BUSINESS_LOGIC_ATTACK' : 'RESOURCE_ENUMERATION_ATTACK',
+    alertType: kind === 'IDOR' ? 'POSSIBLE_IDOR_ATTACK'
+      : kind === 'BIZLOGIC' ? 'POSSIBLE_BUSINESS_LOGIC_ATTACK'
+      : kind === 'HIJACK' ? 'SUSPICIOUS_SESSION_ANOMALY'
+      : 'RESOURCE_ENUMERATION_ATTACK',
     severity,
+    severityPct,
     title,
     summary,
     attempts,
@@ -172,7 +183,7 @@ async function raiseAlert({ ev, kind, title, summary, windowEvs }) {
     attackPath,
   };
   await insertAlert(alert);
-  console.log(`[soc/correlate] ${severity} ${alert.alertType} — ${ev.username} @ ${ev.endpoint}`);
+  console.log(`[soc/correlate] ${severity} ${alert.alertType} (${severityPct}%) — ${ev.username} @ ${ev.endpoint}`);
   return alert;
 }
 
@@ -241,6 +252,18 @@ export async function evaluateEvent(ev) {
         summary: `${ev.username} probed ${targets.size} distinct object targets on ${cls} within ${WINDOW_SECONDS}s (${[...targets].slice(0, 6).join(', ')}). Velocity exceeds any single-request baseline.`,
       });
       break; // one enumeration alert per event
+    }
+  }
+
+  /* --- 4. Session hijack: one session token used from multiple IPs --------- */
+  if (ev.session_token) {
+    const ips = await distinctIpsForSession(ev.session_token);
+    if (ips.length >= 2) {
+      flags.push({
+        kind: 'HIJACK',
+        title: 'Session Hijack Suspected: Token Used From Multiple IPs',
+        summary: `Session ${String(ev.session_token).slice(0, 12)}… (actor ${ev.username}) has been used from ${ips.length} different IPs within the hour (${ips.join(', ')}). Traffic was likely intercepted and the session token replayed from another machine.`,
+      });
     }
   }
 

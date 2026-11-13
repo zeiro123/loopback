@@ -90,7 +90,15 @@ export async function ensureSchema() {
       value JSONB NOT NULL
     )`,
     `ALTER TABLE alerts ADD COLUMN IF NOT EXISTS response JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    `ALTER TABLE alerts ADD COLUMN IF NOT EXISTS severity_pct INTEGER`,
     `ALTER TABLE api_events ADD COLUMN IF NOT EXISTS user_agent TEXT`,
+    `CREATE TABLE IF NOT EXISTS soc_operators (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'analyst'
+    )`,
   ];
   for (let attempt = 1; attempt <= 25; attempt++) {
     try {
@@ -118,6 +126,29 @@ async function seedSettings() {
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO NOTHING', [key, JSON.stringify(value)]);
   }
+  // Five SOC analysts + the lead operator — actions are attributed per analyst
+  const operators = [
+    ['admin', 'Lead Analyst', 'admin', 'admin'],
+    ['nyasha', 'Nyasha M.', 'nyasha2026', 'analyst'],
+    ['chipo', 'Chipo M.', 'chipo2026', 'analyst'],
+    ['farai', 'Farai K.', 'farai2026', 'analyst'],
+    ['rutendo', 'Rutendo N.', 'rutendo2026', 'analyst'],
+    ['tapiwa', 'Tapiwa D.', 'tapiwa2026', 'analyst'],
+  ];
+  for (const [username, name, password, role] of operators) {
+    await pool.query(
+      'INSERT INTO soc_operators (username, name, password, role) VALUES ($1,$2,$3,$4) ON CONFLICT (username) DO NOTHING',
+      [username, name, password, role]
+    );
+  }
+}
+
+export async function validateOperator(username, password) {
+  const { rows } = await pool.query(
+    'SELECT username, name, role FROM soc_operators WHERE username = $1 AND password = $2 LIMIT 1',
+    [String(username || ''), String(password || '')]
+  );
+  return rows[0] || null;
 }
 
 export async function getSettings() {
@@ -185,6 +216,16 @@ export async function dbEventsForTrace(traceId) {
   return rows;
 }
 
+export async function distinctIpsForSession(token, minutes = 60) {
+  if (!token) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ip FROM api_events
+     WHERE session_token = $1 AND ip IS NOT NULL AND ts > now() - ($2 || ' minutes')::interval`,
+    [token, String(minutes)]
+  );
+  return rows.map((r) => r.ip).filter(Boolean);
+}
+
 export async function countRecentAlerts(actorId, alertType, minutes = 10) {
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS n FROM alerts
@@ -196,13 +237,13 @@ export async function countRecentAlerts(actorId, alertType, minutes = 10) {
 
 export async function insertAlert(alert) {
   await pool.query(
-    `INSERT INTO alerts (id, ts, actor_id, username, alert_type, severity, title, summary,
+    `INSERT INTO alerts (id, ts, actor_id, username, alert_type, severity, severity_pct, title, summary,
         attempts, is_cross_functional, affected_endpoints, evidence, attack_path)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      ON CONFLICT (id) DO NOTHING`,
     [
       alert.id, alert.ts, alert.actorId ?? null, alert.username ?? null, alert.alertType,
-      alert.severity, alert.title, alert.summary, alert.attempts ?? 1,
+      alert.severity, alert.severityPct ?? null, alert.title, alert.summary, alert.attempts ?? 1,
       alert.isCrossFunctional ?? false, JSON.stringify(alert.affectedEndpoints ?? []),
       JSON.stringify(alert.evidence ?? null), JSON.stringify(alert.attackPath ?? null),
     ]
@@ -285,7 +326,7 @@ export async function activeControlsMap() {
 
 export async function listAlerts(limit = 200) {
   const { rows } = await pool.query(
-    `SELECT id, ts, actor_id, username, alert_type, severity, title, summary, attempts,
+    `SELECT id, ts, actor_id, username, alert_type, severity, severity_pct, title, summary, attempts,
             is_cross_functional, affected_endpoints, evidence, attack_path, response
      FROM alerts ORDER BY ts DESC LIMIT $1`,
     [limit]

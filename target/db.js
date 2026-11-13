@@ -159,11 +159,63 @@ export async function ensureSchema() {
    ========================================================================== */
 
 const SEED_USERS = [
-  { username: 'Mary',  name: 'Mary Jane',  email: 'mary.jane@apexbank.test',  password: 'peter', address: '14 Samora Machel Avenue, Harare, Zimbabwe', phone: '+263 771 002 100', occupation: 'Retailer' },
-  { username: 'John',  name: 'John Doe',   email: 'john.doe@apexbank.test',   password: 'peter', address: '82 Herbert Chitepo Street, Mutare, Zimbabwe', phone: '+263 772 003 200', occupation: 'Teacher' },
-  { username: 'Alice', name: 'Alice Smith',email: 'alice.smith@apexbank.test',password: 'peter', address: '45 Joshua Nkomo Street, Bulawayo, Zimbabwe', phone: '+263 773 004 300', occupation: 'Engineer' },
-  { username: 'Bob',   name: 'Bob Vance',  email: 'bob.vance@apexbank.test',  password: 'peter', address: '12 Robert Mugabe Way, Gweru, Zimbabwe', phone: '+263 774 005 400', occupation: 'Farmer' },
+  { username: 'Mary',    name: 'Mary Jane',        email: 'mary.jane@apexbank.test',    password: 'peter',        address: '14 Samora Machel Avenue, Harare, Zimbabwe',   phone: '+263 771 002 100', occupation: 'Retailer' },
+  { username: 'John',    name: 'John Doe',         email: 'john.doe@apexbank.test',     password: 'peter',        address: '82 Herbert Chitepo Street, Mutare, Zimbabwe', phone: '+263 772 003 200', occupation: 'Teacher' },
+  { username: 'Alice',   name: 'Alice Smith',      email: 'alice.smith@apexbank.test',  password: 'peter',        address: '45 Joshua Nkomo Street, Bulawayo, Zimbabwe',  phone: '+263 773 004 300', occupation: 'Engineer' },
+  { username: 'Bob',     name: 'Bob Vance',        email: 'bob.vance@apexbank.test',    password: 'peter',        address: '12 Robert Mugabe Way, Gweru, Zimbabwe',       phone: '+263 774 005 400', occupation: 'Farmer' },
+  { username: 'Tendai',  name: 'Tendai Moyo',      email: 'tendai.moyo@apexbank.test',  password: 'tendai2026',   address: '8 Fife Avenue, Harare, Zimbabwe',             phone: '+263 775 110 011', occupation: 'Accountant' },
+  { username: 'Rudo',    name: 'Rudo Chirwa',      email: 'rudo.chirwa@apexbank.test',  password: 'rudo2026',     address: '22 Josiah Tongogara St, Bulawayo, Zimbabwe',  phone: '+263 776 220 022', occupation: 'Nurse' },
+  { username: 'Kudzai',  name: 'Kudzai Ncube',     email: 'kudzai.ncube@apexbank.test', password: 'kudzai2026',   address: '3 Leopold Takawira St, Harare, Zimbabwe',     phone: '+263 777 330 033', occupation: 'Software Developer' },
+  { username: 'Nyasha',  name: 'Nyasha Gumbo',     email: 'nyasha.gumbo@apexbank.test', password: 'nyasha2026',   address: '17 Robert Mugabe Rd, Kwekwe, Zimbabwe',       phone: '+263 778 440 044', occupation: 'Logistics' },
+  { username: 'Chipo',   name: 'Chipo Marange',    email: 'chipo.marange@apexbank.test',password: 'chipo2026',    address: '91 Churchill Ave, Harare, Zimbabwe',          phone: '+263 779 550 055', occupation: 'Lecturer' },
+  { username: 'Tapiwa',  name: 'Tapiwa Dube',      email: 'tapiwa.dube@apexbank.test',  password: 'tapiwa2026',   address: '5 Fife Street, Bulawayo, Zimbabwe',           phone: '+263 770 660 066', occupation: 'Mechanic' },
+  { username: 'Rutendo', name: 'Rutendo Nyoni',    email: 'rutendo.nyoni@apexbank.test',password: 'rutendo2026',  address: '36 Samora Machel Ave, Harare, Zimbabwe',      phone: '+263 771 770 077', occupation: 'Pharmacist' },
+  { username: 'Farai',   name: 'Farai Katsande',   email: 'farai.katsande@apexbank.test',password: 'farai2026',   address: '12 Enterprise Rd, Harare, Zimbabwe',          phone: '+263 772 880 088', occupation: 'Transport' },
+  { username: 'Munashe', name: 'Munashe Zvobgo',   email: 'munashe.zvobgo@apexbank.test',password: 'munashe2026', address: '7 Lobengula St, Bulawayo, Zimbabwe',          phone: '+263 773 990 099', occupation: 'Student' },
+  { username: 'Shamiso', name: 'Shamiso Mhaka',    email: 'shamiso.mhaka@apexbank.test',password: 'shamiso2026',  address: '48 Bournemouth Rd, Harare, Zimbabwe',         phone: '+263 774 110 110', occupation: 'Journalist' },
+  { username: 'Takudzwa',name: 'Takudzwa Siziba',  email: 'takudzwa.siziba@apexbank.test',password: 'takudzwa2026',address: '25 9th Ave, Gweru, Zimbabwe',                 phone: '+263 775 220 220', occupation: 'Electrician' },
+  { username: 'Vimbai',  name: 'Vimbai Chingono',  email: 'vimbai.chingono@apexbank.test',password: 'vimbai2026', address: '63 Kwame Nkrumah Ave, Harare, Zimbabwe',      phone: '+263 776 330 330', occupation: 'Designer' },
+  { username: 'Anesu',   name: 'Anesu Pfumojena',  email: 'anesu.pfumojena@apexbank.test',password: 'anesu2026',  address: '9 Josiah Chinamano St, Kadoma, Zimbabwe',     phone: '+263 777 440 440', occupation: 'Farmer' },
+  { username: 'Tinotenda',name: 'Tinotenda Mapfumo',email: 'tinotenda.mapfumo@apexbank.test',password: 'tinotenda2026',address: '11 Chiremba Rd, Mutare, Zimbabwe',       phone: '+263 778 550 550', occupation: 'Doctor' },
+  { username: 'Rejoice', name: 'Rejoice Nyemba',   email: 'rejoice.nyemba@apexbank.test',password: 'rejoice2026',  address: '32 Jason Moyo Ave, Harare, Zimbabwe',         phone: '+263 779 660 660', occupation: 'Broker' },
+  { username: 'Panashe', name: 'Panashe Gurajena', email: 'panashe.gurajena@apexbank.test',password: 'panashe2026',address: '6 Connaught Rd, Chinhoyi, Zimbabwe',          phone: '+263 770 770 770', occupation: 'Chef' },
 ];
+
+// Deterministic pseudo-random so every fresh install seeds the same realistic history
+function lcg(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => (s = (s * 48271) % 2147483647) / 2147483647;
+}
+
+const SPEND_DESCRIPTIONS = ['OK Zimbabwe', 'Choppies Supermarket', 'TM Pick n Pay', 'Innscor', 'Econet airtime bundle', 'Fuel — Servo Garage', 'ZUPCO monthly fare', 'Pharmacy', 'Hardware supplies'];
+const INCOME_DESCRIPTIONS = ['Monthly salary', 'Salary payment', 'Freelance payment', 'Sale proceeds'];
+
+async function generateHistory(user, account, index) {
+  const rnd = lcg(1000 + index * 77);
+  const count = 3 + Math.floor(rnd() * 4); // 3–6 extra transactions
+  const events = [];
+  for (let i = 0; i < count; i++) {
+    const days = 2 + Math.floor(rnd() * 28);
+    const roll = rnd();
+    if (roll < 0.45) {
+      events.push({ days, type: 'DEPOSIT', amount: Math.round(50 + rnd() * 450), description: INCOME_DESCRIPTIONS[Math.floor(rnd() * INCOME_DESCRIPTIONS.length)] });
+    } else {
+      events.push({ days, type: 'TRANSFER', amount: Math.round(15 + rnd() * 260), description: SPEND_DESCRIPTIONS[Math.floor(rnd() * SPEND_DESCRIPTIONS.length)] });
+    }
+  }
+  events.sort((a, b) => b.days - a.days); // oldest first
+  let running = 500; // opening deposit
+  for (const e of events) {
+    running += e.type === 'DEPOSIT' ? e.amount : -e.amount;
+    await tq(
+      `INSERT INTO transactions (account_id, from_user_id, to_account_number, amount, type, description, balance_after, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [account.id, user.id, account.account_number, e.amount, e.type, e.description, running, new Date(Date.now() - e.days * 86400000).toISOString()]
+    );
+  }
+  await tq('UPDATE accounts SET balance = $2 WHERE id = $1', [account.id, running]);
+}
 
 const SEED_POSTS = [
   { title: 'Apex Trust Bank launches instant ZWL transfers', slug: 'instant-zwl-transfers', excerpt: 'Move money between client accounts in seconds — no queues, no paperwork.', body: 'Today we are switching on instant internal transfers for all Apex Trust clients. Transfers between client accounts now settle immediately, 24/7, with a full audit trail on every movement.\n\nWhat this means for you: no cut-off times, no batch delays, and a downloadable official statement the moment any transaction lands. Visit the Send Money tab to try it — your first 500 ZWL of fees this month is on us.', author_name: 'Apex Trust Communications' },
@@ -203,7 +255,15 @@ async function seedContent() {
 export async function seedIfEmpty() {
   const { rows } = await tq('SELECT COUNT(*)::int AS n FROM users');
   if (rows[0].n > 0) return false;
-  for (const u of SEED_USERS) await createUser(u);
+  const created = [];
+  for (const u of SEED_USERS) {
+    const { user, account } = await createUser(u);
+    created.push({ user, account });
+  }
+  // Realistic varying balances + transaction history for every seeded customer
+  for (let i = 0; i < created.length; i++) {
+    await generateHistory(created[i].user, created[i].account, i);
+  }
   console.log('[target/db] seeded customers:', SEED_USERS.map((u) => u.username).join(', '));
   return true;
 }

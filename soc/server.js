@@ -18,7 +18,7 @@ import {
   listAlerts, listEvents, listTrackedUsers, userActivity, userAlerts, userActions,
   stats, severityBreakdown, clearAll,
   listActions, getSettings, setSetting,
-  latestRiskByActor, riskHistory, insertAction, setAlertResponse,
+  latestRiskByActor, riskHistory, insertAction, setAlertResponse, validateOperator,
 } from './db.js';
 import { evaluateEvent } from './correlate.js';
 import { updateRisk } from './risk.js';
@@ -98,28 +98,29 @@ const OPERATOR_USERNAME = process.env.SOC_OPERATOR || 'admin';
 const OPERATOR_PASSWORD = process.env.SOC_PASSWORD || 'admin';
 let API_KEY = process.env.SOC_API_KEY || `lbk_${crypto.randomBytes(16).toString('hex')}`;
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '');
   const ua = String(req.headers['user-agent'] || 'unknown');
-  if (username === OPERATOR_USERNAME && password === OPERATOR_PASSWORD) {
+  const op = await validateOperator(username, password);
+  if (op) {
     const token = crypto.randomBytes(16).toString('hex');
-    operators.set(token, { username, ip, ua, loginAt: new Date().toISOString() });
-    // The SOC audits its own operator logins too — same event shape as the bank's.
+    operators.set(token, { username: op.username, name: op.name, role: op.role, ip, ua, loginAt: new Date().toISOString() });
     insertAction({
       kind: 'operator_login',
-      targetValue: username,
-      reason: `Operator session opened from ${ip} (${ua.slice(0, 60)})`,
+      targetValue: op.username,
+      reason: `${op.name} (${op.role}) opened a session from ${ip} (${ua.slice(0, 60)})`,
       source: 'system',
-      operator: username,
+      operator: op.name,
       alertId: null,
     }).catch(() => {});
     return res.json({
       success: true,
       token,
-      role: 'admin',
-      username,
-      loginFlow: ['credentials validated', 'operator session opened', 'login recorded in audit log'],
+      role: op.role,
+      username: op.username,
+      name: op.name,
+      loginFlow: ['credentials validated against the operator register', `operator session opened for ${op.name}`, 'login recorded in the audit log'],
     });
   }
   insertAction({
@@ -138,7 +139,7 @@ function requireOperator(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null;
   const key = req.headers['x-api-key'];
   if ((token && operators.has(token)) || (key && key === API_KEY)) {
-    req.operator = token && operators.get(token) ? operators.get(token).username : 'api-key';
+    req.operator = token && operators.get(token) ? operators.get(token).name : 'api-key';
     return next();
   }
   return res.status(401).json({ success: false, error: 'Unauthorized SOC session' });
@@ -244,8 +245,8 @@ app.post('/api/actions', requireOperator, async (req, res) => {
    Settings — autonomous response policy + thresholds + API key
    ========================================================================== */
 
-app.get('/api/settings', requireOperator, async (_req, res) => {
-  res.json({ success: true, settings: await getSettings(), apiKey: API_KEY, operator: OPERATOR_USERNAME });
+app.get('/api/settings', requireOperator, async (req, res) => {
+  res.json({ success: true, settings: await getSettings(), apiKey: API_KEY, operator: req.operator });
 });
 
 app.put('/api/settings', requireOperator, async (req, res) => {

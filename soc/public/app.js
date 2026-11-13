@@ -369,6 +369,17 @@
     );
   }
 
+  // Severity as a percentage 0–100, coloured on a continuous green → red scale
+  function sevPctOf(a) {
+    if (a.severity_pct != null) return a.severity_pct;
+    const base = { INFO: 24, MEDIUM: 48, HIGH: 74, CRITICAL: 90 }[a.severity] ?? 50;
+    return Math.min(99, base + (a.is_cross_functional ? 4 : 0) + Math.min(5, ((a.attempts || 1) - 1) * 2));
+  }
+  function sevColor(pct) {
+    const hue = Math.round(120 - (pct / 100) * 120); // 120 = green, 60 = orange, 0 = red
+    return `hsl(${hue}, 76%, 52%)`;
+  }
+
   function renderAlerts() {
     const alerts = filteredAlerts();
     $('alertsEmpty').classList.toggle('hidden', alerts.length > 0);
@@ -376,37 +387,59 @@
     list.innerHTML = '';
     for (const a of alerts) {
       const card = document.createElement('div');
-      card.className = `alert-card sev-${a.severity}`;
+      card.className = 'alert-card';
+      const pct = sevPctOf(a);
+      const color = sevColor(pct);
       const eps = (a.affected_endpoints || []).length;
       const resp = a.response || {};
       const respBits = [];
       if (resp.blocked) respBits.push('USER BLOCKED');
       if (resp.sessionRevoked) respBits.push('SESSION REVOKED');
       if (resp.dismissed) respBits.push('DISMISSED');
+      const typeShort = a.alert_type === 'POSSIBLE_IDOR_ATTACK' ? 'IDOR'
+        : a.alert_type === 'POSSIBLE_BUSINESS_LOGIC_ATTACK' ? 'BUSINESS LOGIC'
+        : a.alert_type === 'SUSPICIOUS_SESSION_ANOMALY' ? 'SESSION HIJACK'
+        : 'ENUMERATION';
       card.innerHTML = `
-        <div class="alert-top">
-          <span class="sev-chip">${a.severity === 'INFO' ? 'INFORMATIONAL' : `${a.severity} SEVERITY`}</span>
-          <span class="type-chip">${esc(a.alert_type)}</span>
-          <span class="alert-meta">
-            <span>${timeOf(a.ts)}</span><span>•</span><span>${a.attempts} attempt${a.attempts > 1 ? 's' : ''}</span>
-          </span>
+        <div class="alert-row">
+          <span class="sev-disc" style="border-color:${color};color:${color}"><strong>${pct}</strong><em>%</em></span>
+          <div class="alert-row-main">
+            <div class="alert-row-title">${esc(a.title)}</div>
+            <div class="alert-row-sub">
+              <span class="type-chip">${typeShort}</span>
+              <span class="sev-word" style="color:${color}">${esc(a.severity)}</span>
+              <span class="mono">• ${esc(a.username || '—')}</span>
+              <span class="mono">• ${timeOf(a.ts)}</span>
+              ${a.is_cross_functional ? '<span class="cross-flag">cross-functional</span>' : ''}
+              ${respBits.length ? `<span class="resp-flag">${esc(respBits.join(' · '))}</span>` : ''}
+            </div>
+          </div>
+          <button class="alert-expand" type="button" aria-label="Expand alert">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
         </div>
-        <div class="alert-title">${esc(a.title)}</div>
-        <div class="alert-summary">${esc(a.summary)}</div>
-        <div class="alert-strip">
-          <span>Actor: <strong>${esc(a.username || '—')}</strong></span>
-          <span>Endpoints: <strong>${eps}</strong></span>
-          ${a.is_cross_functional ? '<span class="cross-flag">⚑ CROSS-FUNCTIONAL</span>' : ''}
-          ${respBits.length ? `<span class="resp-flag">◈ ${respBits.join(' · ')}</span>` : ''}
-          <span>Trace: <strong>${esc(String(a.evidence?.traceId || '').slice(0, 8))}</strong></span>
-        </div>
-        <div class="alert-actions">
-          <button class="btn brain" data-act="path" type="button">Attack Path</button>
-          <button class="btn ghost" data-act="evidence" type="button">Evidence</button>
-          <button class="btn danger" data-act="block" type="button">Block User</button>
-          <button class="btn warn" data-act="revoke" type="button">Revoke Session</button>
-          <button class="btn ghost" data-act="dismiss" type="button">Dismiss</button>
+        <div class="alert-body hidden">
+          <div class="alert-summary">${esc(a.summary)}</div>
+          <div class="alert-strip">
+            <span>Actor: <strong>${esc(a.username || '—')}</strong></span>
+            <span>Endpoints: <strong>${eps}</strong></span>
+            <span>Trace: <strong>${esc(String(a.evidence?.traceId || '').slice(0, 8))}</strong></span>
+            <span>Severity: <strong style="color:${color}">${pct}%</strong></span>
+          </div>
+          <div class="alert-actions">
+            <button class="btn brain" data-act="path" type="button">Attack Path</button>
+            <button class="btn ghost" data-act="evidence" type="button">Evidence</button>
+            <button class="btn danger" data-act="block" type="button">Block User</button>
+            <button class="btn warn" data-act="revoke" type="button">Revoke Session</button>
+            <button class="btn ghost" data-act="dismiss" type="button">Dismiss</button>
+          </div>
         </div>`;
+      const expandBtn = card.querySelector('.alert-expand');
+      const body = card.querySelector('.alert-body');
+      expandBtn.addEventListener('click', () => {
+        body.classList.toggle('hidden');
+        expandBtn.classList.toggle('open');
+      });
       card.querySelector('[data-act="path"]').addEventListener('click', () => openPath(a));
       card.querySelector('[data-act="evidence"]').addEventListener('click', () => openEvidence(a));
       card.querySelector('[data-act="block"]').addEventListener('click', () =>
@@ -471,7 +504,7 @@
   let pathPositions = [];
 
   function renderPathGraph(nodes, edges) {
-    const W = 920, nodeW = 118, nodeH = 92, colW = 132, y0 = 58;
+    const W = 920, nodeW = 128, colW = 140, y0 = 76, nodeH = 96;
     const cols = [...new Set(nodes.map((n) => n.layer || 'api'))];
     const byLayer = new Map(cols.map((c) => [c, []]));
     nodes.forEach((n) => byLayer.get(n.layer || 'api').push(n));
@@ -481,61 +514,61 @@
       const arr = byLayer.get(c);
       maxRows = Math.max(maxRows, arr.length);
       arr.forEach((n, ri) => {
-        positions_push(n, 36 + ci * (nodeW + colW), y0 + ri * (nodeH + 22), ci);
+        positions_push(n, 40 + ci * (nodeW + colW), y0 + ri * (nodeH + 26), ci);
       });
     });
     function positions_push(n, x, y, col) { pathPositions.push({ node: n, x, y, col }); }
 
-    const H = y0 + maxRows * (nodeH + 22) + 46;
+    const H = y0 + maxRows * (nodeH + 26) + 40;
     const header = cols.map((c, ci) => {
-      const x = 36 + ci * (nodeW + colW);
-      return `<text x="${x + nodeW / 2}" y="30" text-anchor="middle" fill="#93a89e" font-size="11" font-family="monospace" letter-spacing="1.5">${esc(String(c).toUpperCase())}</text>`;
+      const x = 40 + ci * (nodeW + colW);
+      return `<text x="${x + nodeW / 2}" y="34" text-anchor="middle" fill="#93a89e" font-size="12" font-family="monospace" letter-spacing="2">${esc(String(c).toUpperCase())}</text>`;
     }).join('');
 
+    // Animated connection lines between entity centers — no boxes, just icons
     const edgeLines = edges.map((e) => {
       const f = pathPositions[e.from];
       const t = pathPositions[e.to];
       if (!f || !t) return '';
-      const x1 = f.x + nodeW, y1 = f.y + nodeH / 2;
-      const x2 = t.x, y2 = t.y + nodeH / 2;
+      const x1 = f.x + nodeW / 2, y1 = f.y;
+      const x2 = t.x + nodeW / 2, y2 = t.y;
       const mid = (x1 + x2) / 2;
-      return `<path d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}" stroke="#2dd4bf66" fill="none" stroke-width="1.8" class="edge-anim"/>
-        <text x="${mid}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle" fill="#93a89e" font-size="9" font-family="monospace">${esc(e.label || '')}</text>`;
+      return `<path d="M${x1},${y1 - 34} C${mid},${y1 - 34} ${mid},${y2 + 34} ${x2},${y2 + 34}" stroke="#2dd4bf55" fill="none" stroke-width="2" class="edge-anim"/>
+        <text x="${mid}" y="${(y1 + y2) / 2}" text-anchor="middle" fill="#93a89e" font-size="10" font-family="monospace">${esc(e.label || '')}</text>`;
     }).join('');
 
-    const nodeRects = pathPositions.map((p, i) => {
+    // Boxless nodes: colored icon disc + entity label underneath
+    const nodeMarks = pathPositions.map((p, i) => {
       const color = LAYER_COLORS[p.node.layer] || '#2dd4bf';
-      const label = String(p.node.label || '').slice(0, 24);
-      const lines = wrapSvgText(String(p.node.details || ''), nodeW - 18, 8.5);
+      const label = String(p.node.label || '').slice(0, 26);
       return `
         <g class="pnode" data-idx="${i}">
-          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="12" fill="#111b17" stroke="${color}" stroke-width="1.6"/>
-          <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="5" rx="2.5" fill="${color}"/>
-          ${layerIcon(p.node.layer, p.x + 22, p.y + 30, color)}
-          <text x="${p.x + 38}" y="${p.y + 28}" fill="#ecf3ee" font-size="9.5" font-weight="bold" font-family="monospace">${esc(String(p.node.layer || '').toUpperCase())}</text>
-          <text x="${p.x + 10}" y="${p.y + 52}" fill="#ecf3ee" font-size="9.5" font-weight="bold" font-family="monospace">${esc(label)}</text>
-          ${lines.map((l, li) => `<text x="${p.x + 10}" y="${p.y + 64 + li * 10}" fill="#93a89e" font-size="8.5" font-family="monospace">${esc(l)}</text>`).join('')}
-          <title>${esc(String(p.node.details || ''))}</text>
+          <circle cx="${p.x + nodeW / 2}" cy="${p.y}" r="30" fill="#111b17" stroke="${color}" stroke-width="2"/>
+          ${layerIcon(p.node.layer, p.x + nodeW / 2, p.y, color)}
+          <text x="${p.x + nodeW / 2}" y="${p.y + 48}" text-anchor="middle" fill="#ecf3ee" font-size="10" font-weight="bold" font-family="monospace">${esc(label)}</text>
+          <title>${esc(String(p.node.details || ''))}</title>
         </g>`;
     }).join('');
 
-    $('pathGraph').innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${header}${edgeLines}${nodeRects}</svg>`;
+    $('pathGraph').innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${header}${edgeLines}${nodeMarks}</svg>`;
 
-    // Interactivity: click a node to open its full details below the graph
+    // Interactivity: click (or hover) a node to open its full details below
+    const showDetail = (el) => {
+      $('pathGraph').querySelectorAll('.pnode').forEach((n) => n.classList.remove('selected'));
+      el.classList.add('selected');
+      const p = pathPositions[Number(el.dataset.idx)];
+      const color = LAYER_COLORS[p.node.layer] || '#2dd4bf';
+      const box = $('pathNodeDetail');
+      box.style.borderLeftColor = color;
+      box.innerHTML = `
+        <h4 style="color:${color}">${esc(LAYER_TITLES[p.node.layer] || p.node.layer)} — ${esc(p.node.label)}</h4>
+        <p>${esc(p.node.details)}</p>
+        ${(p.node.statements || []).map((s) => `<p class="mono" style="font-size:11px;color:#99f6e4">↳ ${esc(s)}</p>`).join('')}`;
+      box.classList.remove('hidden');
+    };
     $('pathGraph').querySelectorAll('.pnode').forEach((el) => {
-      el.addEventListener('click', () => {
-        $('pathGraph').querySelectorAll('.pnode').forEach((n) => n.classList.remove('selected'));
-        el.classList.add('selected');
-        const p = pathPositions[Number(el.dataset.idx)];
-        const color = LAYER_COLORS[p.node.layer] || '#2dd4bf';
-        const box = $('pathNodeDetail');
-        box.style.borderLeftColor = color;
-        box.innerHTML = `
-          <h4 style="color:${color}">${esc(LAYER_TITLES[p.node.layer] || p.node.layer)} — ${esc(p.node.label)}</h4>
-          <p>${esc(p.node.details)}</p>
-          ${(p.node.statements || []).map((s) => `<p class="mono" style="font-size:11px;color:#99f6e4">↳ ${esc(s)}</p>`).join('')}`;
-        box.classList.remove('hidden');
-      });
+      el.addEventListener('click', () => showDetail(el));
+      el.addEventListener('mouseenter', () => showDetail(el));
     });
   }
 
